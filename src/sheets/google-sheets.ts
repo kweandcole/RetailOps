@@ -5,10 +5,18 @@ export const SHEET_NAMES = ['Outlet Master','SKU Master','Visits','Stock','Sampl
 export type SheetName = typeof SHEET_NAMES[number];
 let client: sheets_v4.Sheets | undefined;
 
+function normalizePrivateKey(value: string) {
+  return value
+    .trim()
+    .replace(/^['"]|['"]$/g, '')
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n');
+}
+
 export function getSheetsClient() {
   if (client) return client;
   const env = getEnv();
-  const auth = new google.auth.GoogleAuth({ credentials: { client_email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL, private_key: env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') }, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const auth = new google.auth.GoogleAuth({ credentials: { client_email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL, private_key: normalizePrivateKey(env.GOOGLE_PRIVATE_KEY) }, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
   client = google.sheets({ version: 'v4', auth });
   return client;
 }
