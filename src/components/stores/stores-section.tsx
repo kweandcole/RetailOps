@@ -44,7 +44,15 @@ export default function StoresSection() {
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || 'Unable to read the legacy Outlet Master.');
       const outlets = result.outlets as Store[];
-      await Promise.all(outlets.map((outlet) => setDoc(doc(getFirebaseDb(), 'outlets', outlet.outletId), outlet, { merge: true })));
+      await Promise.all(outlets.map((outlet) => {
+        const store = {
+          ...outlet,
+          // Keep compatibility aliases so Visit Entry can display the human-readable branch name.
+          outletName: outlet.branchName,
+          branch: outlet.branchName,
+        };
+        return setDoc(doc(getFirebaseDb(), 'outlets', outlet.outletId), store, { merge: true });
+      }));
       setMessage(`${outlets.length} outlets imported from the legacy Outlet Master.`);
       await loadStores();
     } catch (err) {
