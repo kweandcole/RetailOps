@@ -16,8 +16,14 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Google Sheets health check failed', error);
+    const err = error as { code?: number; message?: string };
     return NextResponse.json(
-      { ok: false, error: 'Google Sheets connection failed' },
+      {
+        ok: false,
+        error: 'Google Sheets connection failed',
+        googleCode: err.code ?? null,
+        googleMessage: err.message ?? 'Unknown error',
+      },
       { status: 503 },
     );
   }
