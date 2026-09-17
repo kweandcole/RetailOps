@@ -13,10 +13,46 @@ function normalizePrivateKey(value: string) {
     .replace(/\r\n/g, '\n');
 }
 
+function getServiceAccountCredentials(env: ReturnType<typeof getEnv>) {
+  if (env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64) {
+    try {
+      const json = Buffer.from(env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64, 'base64').toString('utf8');
+      const serviceAccount = JSON.parse(json) as {
+        client_email?: string;
+        private_key?: string;
+      };
+
+      if (!serviceAccount.client_email || !serviceAccount.private_key) {
+        throw new Error('Decoded service account JSON is missing client_email or private_key');
+      }
+
+      return {
+        client_email: serviceAccount.client_email,
+        private_key: serviceAccount.private_key,
+      };
+    } catch (error) {
+      throw new Error(`Unable to decode Google service account JSON: ${error instanceof Error ? error.message : 'invalid credentials'}`);
+    }
+  }
+
+  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !env.GOOGLE_PRIVATE_KEY) {
+    throw new Error('Google service account credentials are not configured');
+  }
+
+  return {
+    client_email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: normalizePrivateKey(env.GOOGLE_PRIVATE_KEY),
+  };
+}
+
 export function getSheetsClient() {
   if (client) return client;
   const env = getEnv();
-  const auth = new google.auth.GoogleAuth({ credentials: { client_email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL, private_key: normalizePrivateKey(env.GOOGLE_PRIVATE_KEY) }, scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+  const credentials = getServiceAccountCredentials(env);
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
   client = google.sheets({ version: 'v4', auth });
   return client;
 }
