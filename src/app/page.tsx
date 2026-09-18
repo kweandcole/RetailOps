@@ -78,7 +78,8 @@ export default function HomePage() {
   });
   const [samplingClosingSales, setSamplingClosingSales] = useState<Record<string, string>>({
     'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '',
-  });  useEffect(() => {
+  });
+  const [samplingClosingCustomers, setSamplingClosingCustomers] = useState('');  useEffect(() => {
     if (!activeVisitStartedAt) {
       setActiveVisitElapsedSeconds(0);
       return;
@@ -158,6 +159,7 @@ export default function HomePage() {
       { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
     ]);
     setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
+    setSamplingClosingCustomers('');
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
@@ -373,7 +375,10 @@ export default function HomePage() {
   async function completeSamplingVisit() {
     if (!activeVisitId) { setVisitMessage('No active sampling visit is currently running.'); return; }
     const invalid = Object.values(samplingClosingSales).some((value) => value !== '' && (!Number.isInteger(Number(value)) || Number(value) < 0));
-    if (invalid) { setVisitMessage('Bottles sold must be whole numbers of 0 or more.'); return; }
+    if (invalid || samplingClosingCustomers === '' || !Number.isInteger(Number(samplingClosingCustomers)) || Number(samplingClosingCustomers) < 0) {
+      setVisitMessage('Customers sampled and bottles sold must be whole numbers of 0 or more.');
+      return;
+    }
     const soldBySku = Object.fromEntries(Object.entries(samplingClosingSales).map(([sku, value]) => [sku, value === '' ? 0 : Number(value)]));
     const opening = stockEntries.reduce<Record<string, number>>((acc, entry) => {
       acc[entry.sku] = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
@@ -395,7 +400,7 @@ export default function HomePage() {
       await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
         sampling: {
           conducted: true,
-          customersSampled: 0,
+          customersSampled: Number(samplingClosingCustomers),
           bottlesSold: Object.values(soldBySku).reduce((sum, quantity) => sum + quantity, 0),
           bottlesSoldBySku: soldBySku,
           feedback: sampling.feedback.trim(),
@@ -411,6 +416,7 @@ export default function HomePage() {
       setActiveVisitId(null); setActiveVisitStartedAt(null); setActiveVisitElapsedSeconds(0); setVisitOpen(false); setVisitStep(1);
       setVisit({ outletId: '', outletName: '', notes: '' });
       setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
+      setSamplingClosingCustomers('');
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to complete sampling visit.');
     } finally { setSavingVisit(false); }
@@ -702,6 +708,12 @@ function VisitEntry({
     </>}
 
     {visitMode === 'SAMPLING_ONLY' && visitStep === 3 && <>
+      <label style={styles.field}>
+        <span style={styles.fieldLabel}>Customers sampled</span>
+        <input type="number" min="0" step="1" inputMode="numeric" value={samplingClosingCustomers} onChange={(e) => setSamplingClosingCustomers(e.target.value)} placeholder="0" style={styles.input} />
+        <span style={styles.checklistProgressText}>Enter the total number of shoppers who sampled the products during this activation.</span>
+      </label>
+
       <div style={styles.samplingStockBlock}>
         <div><strong style={styles.checklistProgress}>Record bottles sold</strong><span style={styles.checklistProgressText}>Enter the bottles sold during the sampling activity. Remaining stock is opening stock minus sold stock.</span></div>
         {stockEntries.map((entry) => {
