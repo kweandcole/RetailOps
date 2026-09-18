@@ -17,21 +17,30 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    Promise.all([
+    Promise.allSettled([
       getDocs(query(collection(getFirebaseDb(), 'visits'), where('outletId', '==', outletId))),
       getDocs(query(collection(getFirebaseDb(), 'orders'), where('outletId', '==', outletId))),
       getDocs(query(collection(getFirebaseDb(), 'stock'), where('outletId', '==', outletId))),
       getDocs(query(collection(getFirebaseDb(), 'expiry'), where('outletId', '==', outletId))),
-    ]).then(([visitSnap, orderSnap, stockSnap, expirySnap]) => {
+    ]).then((results) => {
       if (!mounted) return;
-      const loadedVisits: Array<Record<string, any>> = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
-      loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
-      setVisits(loadedVisits);
-      setOrders(orderSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
-      setStock(stockSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
-      setExpiry(expirySnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
+
+      const [visitResult, orderResult, stockResult, expiryResult] = results;
+      const visitSnap = visitResult.status === 'fulfilled' ? visitResult.value : null;
+      const orderSnap = orderResult.status === 'fulfilled' ? orderResult.value : null;
+      const stockSnap = stockResult.status === 'fulfilled' ? stockResult.value : null;
+      const expirySnap = expiryResult.status === 'fulfilled' ? expiryResult.value : null;
+
+      if (visitSnap) {
+        const loadedVisits: Array<Record<string, any>> = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+        loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || b.startedAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || a.startedAt?.toDate?.()?.getTime?.() || 0));
+        setVisits(loadedVisits);
+      }
+      if (orderSnap) setOrders(orderSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
+      if (stockSnap) setStock(stockSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
+      if (expirySnap) setExpiry(expirySnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
     }).catch(() => {
-      if (mounted) { setVisits([]); setOrders([]); setStock([]); setExpiry([]); }
+      if (mounted) setLoading(false);
     }).finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [outletId]);
