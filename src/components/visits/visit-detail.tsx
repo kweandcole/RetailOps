@@ -74,11 +74,16 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
     </Block>}
 
     {sampling.conducted != null && <Block label="Sampling">
-      <p style={styles.text}>{sampling.conducted ? `${sampling.customersSampled || 0} customers sampled · ${sampling.bottlesSold || 0} bottles sold` : 'Sampling not conducted'}</p>
+      <p style={styles.text}>{sampling.conducted ? `${sampling.customersSampled || 0} customers sampled · ${sampling.bottlesSold || 0} bottles sold` : "Sampling not conducted"}</p>
+      {sampling.conducted && Number(sampling.customersSampled) > 0 && <p style={styles.metric}>Sample-to-sale rate: {((Number(sampling.bottlesSold || 0) / Number(sampling.customersSampled)) * 100).toFixed(1)}%</p>}
+      {sampling.conducted && sampling.bottlesSoldBySku && Object.keys(sampling.bottlesSoldBySku).length > 0 && (
+        <div style={styles.list}>{Object.entries(sampling.bottlesSoldBySku).map(([sku, qty]) => (
+          <div key={sku} style={styles.row}><span>{sku}</span><strong>{Number(qty || 0)} bottles</strong></div>
+        ))}</div>
+      )}
       {sampling.reason && <small>{sampling.reason}</small>}
       {sampling.feedback && <p style={styles.text}>{sampling.feedback}</p>}
-    </Block>}
-
+    </Block>
     {ordersLoading && <Block label="Order"><p style={styles.text}>Loading order details…</p></Block>}
     {!ordersLoading && orders.length > 0 && <Block label="Order">
       <div style={styles.list}>{orderItems.map((item: any) => <div key={item.sku} style={styles.row}><span>{item.productName}</span><strong>{item.quantity} × KSh {Number(item.unitPrice || 0).toLocaleString()}</strong></div>)}</div>
@@ -106,5 +111,6 @@ const styles: Record<string, React.CSSProperties> = {
   list: { display: 'grid', gap: 5, marginTop: 6 },
   row: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, padding: '7px 8px', background: '#fff', borderRadius: 7, fontSize: 11 },
   text: { margin: '6px 0 0', fontSize: 11, lineHeight: 1.45 },
+  metric: { margin: '8px 0 0', fontSize: 10, fontWeight: 800 },
   total: { margin: '8px 0 0', fontWeight: 800, fontSize: 11 },
 };
