@@ -6,6 +6,7 @@ import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebas
 import StoresSection from '@/components/stores/stores-section';
 import VisitEvidence from '@/components/visits/visit-evidence';
 import VisitEvidenceSummary from '@/components/visits/visit-evidence-summary';
+import VisitDetail from '@/components/visits/visit-detail';
 
 type NavItem = { label: string; icon: string };
 type Outlet = { outletId: string; outletName?: string; retailer?: string; city?: string; branch?: string };
@@ -824,6 +825,8 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
             <strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong>
             <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}</div>
             <VisitEvidenceSummary visitId={item.id} />
+          <button onClick={(e) => { e.stopPropagation(); setSelectedVisit(selectedVisit?.id === item.id ? null : item); }} style={styles.smallButton}>{selectedVisit?.id === item.id ? 'Hide details' : 'View details →'}</button>
+          {selectedVisit?.id === item.id && <VisitDetail visit={item} />}
           </div>
           <span style={styles.statusPill}>{item.status || 'STARTED'}</span>
         </article>;
