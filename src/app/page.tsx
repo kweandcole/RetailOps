@@ -503,7 +503,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} activeVisitElapsedSeconds={activeVisitElapsedSeconds} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -595,6 +595,7 @@ function VisitEntry({
   onCompleteSampling,
   samplingClosingSales,
   setSamplingClosingSales,
+  activeVisitElapsedSeconds,
   onSaveChecklist,
   onSaveStock,
   onSaveExpiry,
@@ -628,6 +629,7 @@ function VisitEntry({
   onCompleteSampling: () => void;
   samplingClosingSales: Record<string, string>;
   setSamplingClosingSales: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  activeVisitElapsedSeconds: number;
   onSaveChecklist: () => void;
   onSaveStock: () => void;
   onSaveExpiry: () => void;
