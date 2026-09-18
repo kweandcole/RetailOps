@@ -1,9 +1,9 @@
 import { appendRows, readRange } from './google-sheets';
-import { mapRows, outletFromRow, skuFromRow, visitFromRow, stockFromRow, samplingFromRow, reorderFromRow, rosterFromRow } from './row-mapper';
+import { mapRows, outletsFromRows, skuFromRow, visitFromRow, stockFromRow, samplingFromRow, reorderFromRow, rosterFromRow } from './row-mapper';
 import type { Outlet, SKU, Visit, StockRow, SamplingRow, Reorder, RosterEntry } from '@/domain/types';
 
 export class SheetsRepository {
-  async outlets(): Promise<Outlet[]> { return mapRows(await readRange("'Outlet Master'!A:Z"), outletFromRow); }
+  async outlets(): Promise<Outlet[]> { return outletsFromRows(await readRange("'Outlet Master'!A:Z")); }
   async skus(): Promise<SKU[]> { return mapRows(await readRange("'SKU Master'!A:Z"), skuFromRow); }
   async visits(): Promise<Visit[]> { return mapRows(await readRange("'Visits'!A:Z"), visitFromRow); }
   async stock(): Promise<StockRow[]> { return mapRows(await readRange("'Stock'!A:Z"), stockFromRow); }
