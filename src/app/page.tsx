@@ -704,7 +704,7 @@ function VisitEntry({
               <strong style={styles.reasonLabel}>Products sold during sampling</strong>
               <span style={styles.checklistProgressText}>Enter the number of bottles sold for each product. Leave blank for none.</span>
             </div>
-            ${['SKU-001:Honey Habanero Hot Sauce','SKU-002:Hot Honey','SKU-003:Jalapeno Lime Hot Sauce','SKU-004:Mango Pineapple Habanero Hot Sauce'].map((item) => {
+            {['SKU-001:Honey Habanero Hot Sauce','SKU-002:Hot Honey','SKU-003:Jalapeno Lime Hot Sauce','SKU-004:Mango Pineapple Habanero Hot Sauce'].map((item) => {
               const [sku, productName] = item.split(':');
               return <label key={sku} style={styles.samplingProductRow}>
                 <span style={styles.samplingProductName}>{productName}</span>
@@ -727,7 +727,7 @@ function VisitEntry({
       <div style={styles.activeVisitCard}>
         <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
         <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
-        <p style={styles.activeVisitText}>The visit timer started when you tapped Start Visit. Expiry, sampling and feedback will be added here next.</p>
+        <p style={styles.activeVisitText}>The visit timer started when you tapped Start Visit. Checklist, stock, expiry and sampling have been recorded. Stop the visit when the store activity is complete.</p>
         <div style={styles.formActions}>
           <button onClick={onStop} disabled={saving} style={styles.stopButton}>{saving ? 'Stopping…' : 'Stop Visit'}</button>
         </div>
