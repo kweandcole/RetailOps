@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Temporary authenticated-user access for the active prototype.
+    // These rules will be tightened to role-based access before production.
+    match /outlets/{outletId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /visits/{visitId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /stock/{stockId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /sampling/{samplingId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /orders/{orderId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
