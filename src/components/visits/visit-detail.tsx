@@ -83,7 +83,8 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
       )}
       {sampling.reason && <small>{sampling.reason}</small>}
       {sampling.feedback && <p style={styles.text}>{sampling.feedback}</p>}
-    </Block>
+    </Block>}
+
     {ordersLoading && <Block label="Order"><p style={styles.text}>Loading order details…</p></Block>}
     {!ordersLoading && orders.length > 0 && <Block label="Order">
       <div style={styles.list}>{orderItems.map((item: any) => <div key={item.sku} style={styles.row}><span>{item.productName}</span><strong>{item.quantity} × KSh {Number(item.unitPrice || 0).toLocaleString()}</strong></div>)}</div>
