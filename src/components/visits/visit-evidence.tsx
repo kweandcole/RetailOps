@@ -16,7 +16,7 @@ type EvidenceFile = {
   id: string;
   fileName: string;
   photoType: string;
-  webViewLink?: string | null;
+  driveUrl?: string | null;
   uploadedAt?: any;
 };
 
