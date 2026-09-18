@@ -111,8 +111,12 @@ export default function HomePage() {
         getDocs(query(collection(getFirebaseDb(), 'visits'), where('repUid', '==', user.uid))),
       ]);
       const directOrders = orderSnapshot.docs.map((d) => ({ id: d.id, source: 'ORDER', ...d.data() }));
-      const visitOrders = visitSnapshot.docs
-        .map((d) => ({ id: d.id, source: 'VISIT', ...d.data() } as Record<string, any>))
+      const visitRows: Record<string, any>[] = visitSnapshot.docs.map((d) => ({
+        id: d.id,
+        source: 'VISIT',
+        ...d.data(),
+      }));
+      const visitOrders = visitRows
         .filter((v) => v.orderPlaced === true)
         .map((v) => ({
           id: v.id,
