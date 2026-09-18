@@ -42,6 +42,12 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
   const stock = Array.isArray(full.stockEntries) ? full.stockEntries : [];
   const expiry = Array.isArray(full.expiry) ? full.expiry : [];
   const orderItems = orders.flatMap((order) => Array.isArray(order.items) ? order.items : []);
+  const skuNames: Record<string, string> = {
+    'SKU-001': 'Honey Habanero Hot Sauce',
+    'SKU-002': 'Hot Honey',
+    'SKU-003': 'Jalapeno Lime Hot Sauce',
+    'SKU-004': 'Mango Pineapple Habanero Hot Sauce',
+  };
 
   return <div style={styles.panel}>
     <div style={styles.grid}>
@@ -78,7 +84,7 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
       {sampling.conducted && Number(sampling.customersSampled) > 0 && <p style={styles.metric}>Sample-to-sale rate: {((Number(sampling.bottlesSold || 0) / Number(sampling.customersSampled)) * 100).toFixed(1)}%</p>}
       {sampling.conducted && sampling.bottlesSoldBySku && Object.keys(sampling.bottlesSoldBySku).length > 0 && (
         <div style={styles.list}>{Object.entries(sampling.bottlesSoldBySku).map(([sku, qty]) => (
-          <div key={sku} style={styles.row}><span>{sku}</span><strong>{Number(qty || 0)} bottles</strong></div>
+          <div key={sku} style={styles.row}><span>{skuNames[sku] || sku}</span><strong>{Number(qty || 0)} bottles</strong></div>
         ))}</div>
       )}
       {sampling.reason && <small>{sampling.reason}</small>}
