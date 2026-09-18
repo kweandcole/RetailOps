@@ -61,7 +61,7 @@ export default function HomePage() {
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
-        const loaded = snapshot.docs.map((doc) => ({ ...(doc.data() as Outlet), outletId: doc.id })).sort((a, b) => (a.outletName || '').localeCompare(b.outletName || ''));
+        const loaded = snapshot.docs.map((doc) => ({ ...(doc.data() as Outlet), outletId: doc.id })).sort((a, b) => (a.retailer || '').localeCompare(b.retailer || '') || (a.branch || a.outletName || '').localeCompare(b.branch || b.outletName || ''));
         setOutlets(loaded);
       } catch (err) {
         setVisitMessage(err instanceof Error ? err.message : 'Unable to load stores.');
@@ -148,7 +148,7 @@ function VisitEntry({ outlets, visit, setVisit, gpsStatus, onCaptureGps, onSave,
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}><div><div style={styles.eyebrow}>VISIT ENTRY</div><h2 style={styles.sectionTitle}>Start a store visit</h2><p style={styles.sectionSubtitle}>Record the visit first; stock, sampling and feedback can be added next.</p></div><button onClick={onClose} style={styles.secondaryButton}>Back</button></div>
     <div style={styles.formGrid}>
-      <label style={styles.field}><span style={styles.fieldLabel}>Store</span><select value={visit.outletId} onChange={(e) => { const selected = outlets.find((o) => o.outletId === e.target.value); setVisit({ ...visit, outletId: e.target.value, outletName: selected?.outletName || selected?.branch || e.target.value }); }} style={styles.input}><option value="">Select a store</option>{outlets.map((outlet) => <option key={outlet.outletId} value={outlet.outletId}>{outlet.outletName || outlet.branch || outlet.outletId}{outlet.retailer ? ` — ${outlet.retailer}` : ''}</option>)}</select></label>
+      <label style={styles.field}><span style={styles.fieldLabel}>Store</span><select value={visit.outletId} onChange={(e) => { const selected = outlets.find((o) => o.outletId === e.target.value); setVisit({ ...visit, outletId: e.target.value, outletName: selected?.retailer ? `${selected.retailer} - ${selected.branch || selected.outletName || e.target.value}` : (selected?.branch || selected?.outletName || e.target.value) }); }} style={styles.input}><option value="">Select a store</option>{outlets.map((outlet) => <option key={outlet.outletId} value={outlet.outletId}>{outlet.retailer ? `${outlet.retailer} - ${outlet.branch || outlet.outletName || outlet.outletId}` : (outlet.branch || outlet.outletName || outlet.outletId)}</option>)}</select></label>
       <div style={styles.infoBox}><span style={styles.fieldLabel}>Field rep</span><strong>Signed-in user</strong><span style={styles.muted}>{visit.outletName ? 'Ready to start visit' : 'Select a store first'}</span></div>
       <div style={styles.infoBox}><span style={styles.fieldLabel}>GPS location</span><strong>{gpsStatus}</strong><button type="button" onClick={onCaptureGps} style={styles.smallButton}>Capture GPS</button></div>
       <label style={{ ...styles.field, gridColumn: '1 / -1' }}><span style={styles.fieldLabel}>Notes</span><textarea value={visit.notes} onChange={(e) => setVisit({ ...visit, notes: e.target.value })} placeholder="Optional visit notes" rows={4} style={styles.textarea} /></label>
