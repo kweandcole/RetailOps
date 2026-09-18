@@ -79,7 +79,9 @@ export default function HomePage() {
   const [samplingClosingSales, setSamplingClosingSales] = useState<Record<string, string>>({
     'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '',
   });
-  const [samplingClosingCustomers, setSamplingClosingCustomers] = useState('');  useEffect(() => {
+  const [samplingClosingCustomers, setSamplingClosingCustomers] = useState('');
+  const [samplingOrderPlaced, setSamplingOrderPlaced] = useState<boolean | null>(null);
+  const [samplingOrderNotes, setSamplingOrderNotes] = useState('');  useEffect(() => {
     if (!activeVisitStartedAt) {
       setActiveVisitElapsedSeconds(0);
       return;
@@ -99,65 +101,6 @@ export default function HomePage() {
       return undefined;
     }
   }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const uid = user.uid;
-
-    async function restoreActiveSamplingVisit() {
-      try {
-        const db = getFirebaseDb();
-        const snapshot = await getDocs(query(
-          collection(db, 'visits'),
-          where('repUid', '==', uid)
-        ));
-        if (cancelled) return;
-
-        const active = snapshot.docs
-          .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
-          .filter(({ data }) => data.status === 'STARTED' && data.visitType === 'SAMPLING_ONLY')
-          .sort((a, b) => {
-            const aMs = a.data.startedAt?.toMillis?.() ?? 0;
-            const bMs = b.data.startedAt?.toMillis?.() ?? 0;
-            return bMs - aMs;
-          })[0];
-
-        if (!active) return;
-
-        const data = active.data;
-        const startedAt = data.startedAt?.toDate?.();
-        const openingStock = Array.isArray(data.openingStock) ? data.openingStock : [];
-
-        setActiveVisitId(active.id);
-        setActiveVisitStartedAt(startedAt instanceof Date ? startedAt : new Date());
-        setActiveVisitElapsedSeconds(startedAt instanceof Date ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) : 0);
-        setVisitMode('SAMPLING_ONLY');
-        setVisitOpen(true);
-        setActiveNav('Visits');
-        setVisitStep(2);
-        setVisit({
-          outletId: data.outletId || '',
-          outletName: data.outletName || '',
-          notes: data.notes || '',
-        });
-        if (openingStock.length > 0) {
-          setStockEntries(openingStock.map((entry: { sku: string; productName: string; shelfStock?: number; backStock?: number }) => ({
-            sku: entry.sku,
-            productName: entry.productName,
-            shelfStock: String(entry.shelfStock ?? 0),
-            backStock: String(entry.backStock ?? 0),
-          })));
-        }
-        setVisitMessage('Active sampling visit restored. The timer reflects the original start time, even if the browser was closed.');
-      } catch (err) {
-        if (!cancelled) setVisitMessage(err instanceof Error ? err.message : 'Unable to restore active sampling visit.');
-      }
-    }
-
-    void restoreActiveSamplingVisit();
-    return () => { cancelled = true; };
-  }, [user]);
 
   async function handleSignIn() {
     setBusy(true); setError('');
@@ -219,6 +162,8 @@ export default function HomePage() {
     ]);
     setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
     setSamplingClosingCustomers('');
+    setSamplingOrderPlaced(null);
+    setSamplingOrderNotes('');
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
@@ -448,36 +393,89 @@ export default function HomePage() {
     } finally { setSavingVisit(false); }
   }
 
+  async function resumeSamplingSession(session: { id: string; data: Record<string, any> }) {
+    const data = session.data;
+    const openingStock = Array.isArray(data.openingStock) ? data.openingStock : [];
+    const startedAt = data.startedAt?.toDate?.();
+
+    setActiveVisitId(session.id);
+    setActiveVisitStartedAt(startedAt instanceof Date ? startedAt : new Date());
+    setActiveNav('Sampling');
+    setVisitMode('SAMPLING_ONLY');
+    setVisitOpen(true);
+    setVisitStep(3);
+    setVisit({
+      outletId: data.outletId || '',
+      outletName: data.outletName || '',
+      notes: data.notes || '',
+    });
+    setGps(data.gps?.lat && data.gps?.lng ? {
+      lat: data.gps.lat,
+      lng: data.gps.lng,
+      accuracyMeters: data.gps.accuracyMeters || 0,
+    } : null);
+    setStockEntries(openingStock.map((entry: any) => ({
+      sku: entry.sku,
+      productName: entry.productName,
+      shelfStock: String(entry.shelfStock ?? 0),
+      backStock: String(entry.backStock ?? 0),
+    })));
+    setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
+    setSamplingClosingCustomers('');
+    setSamplingOrderPlaced(data.orderPlaced ?? null);
+    setSamplingOrderNotes(data.orderNotes || '');
+    setActiveVisitElapsedSeconds(startedAt instanceof Date ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) : 0);
+    setVisitMessage('Sampling session selected. Enter the closing stock and complete the session.');
+  }
+
   async function completeSamplingVisit() {
-    if (!activeVisitId) { setVisitMessage('No active sampling visit is currently running.'); return; }
-    const invalid = Object.values(samplingClosingSales).some((value) => value !== '' && (!Number.isInteger(Number(value)) || Number(value) < 0));
-    if (invalid || samplingClosingCustomers === '' || !Number.isInteger(Number(samplingClosingCustomers)) || Number(samplingClosingCustomers) < 0) {
-      setVisitMessage('Customers sampled and bottles sold must be whole numbers of 0 or more.');
+    if (!activeVisitId) { setVisitMessage('No sampling session is currently selected.'); return; }
+
+    const invalidClosing = Object.values(samplingClosingSales).some((value) =>
+      value !== '' && (!Number.isInteger(Number(value)) || Number(value) < 0)
+    );
+    if (invalidClosing || samplingClosingCustomers === '' ||
+      !Number.isInteger(Number(samplingClosingCustomers)) || Number(samplingClosingCustomers) < 0) {
+      setVisitMessage('Closing stock and customers sampled must be whole numbers of 0 or more.');
       return;
     }
-    const soldBySku = Object.fromEntries(Object.entries(samplingClosingSales).map(([sku, value]) => [sku, value === '' ? 0 : Number(value)]));
+    if (samplingOrderPlaced === null) {
+      setVisitMessage('Please indicate whether an order was placed.');
+      return;
+    }
+
+    const closingBySku = Object.fromEntries(
+      Object.entries(samplingClosingSales).map(([sku, value]) => [sku, value === '' ? 0 : Number(value)])
+    );
     const opening = stockEntries.reduce<Record<string, number>>((acc, entry) => {
-      acc[entry.sku] = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
+      acc[entry.sku] = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) +
+        (entry.backStock === '' ? 0 : Number(entry.backStock));
       return acc;
     }, {});
-    const hasOversold = Object.entries(soldBySku).some(([sku, sold]) => sold > (opening[sku] || 0));
-    if (hasOversold) { setVisitMessage('Bottles sold cannot be greater than the opening stock.'); return; }
-    if (!window.confirm('Complete this sampling visit and save the sold stock?')) return;
+    const hasInvalidClosing = Object.entries(closingBySku).some(([sku, closing]) => closing > (opening[sku] || 0));
+    if (hasInvalidClosing) {
+      setVisitMessage('Closing stock cannot be greater than the opening stock.');
+      return;
+    }
+
+    if (!window.confirm('Complete this sampling session and save the closing stock?')) return;
     setSavingVisit(true); setVisitMessage('');
     try {
       const closingStock = stockEntries.map((entry) => {
-        const openingQty = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
-        const soldQty = soldBySku[entry.sku] || 0;
-        return { sku: entry.sku, productName: entry.productName, openingStock: openingQty, bottlesSold: soldQty, remainingStock: openingQty - soldQty };
+        const openingQty = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) +
+          (entry.backStock === '' ? 0 : Number(entry.backStock));
+        const remainingStock = closingBySku[entry.sku] || 0;
+        const soldQty = openingQty - remainingStock;
+        return { sku: entry.sku, productName: entry.productName, openingStock: openingQty, bottlesSold: soldQty, remainingStock };
       });
       const now = Date.now();
       const startedMs = activeVisitStartedAt?.getTime();
       const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
       const db = getFirebaseDb();
       const batch = writeBatch(db);
+
       for (const item of closingStock) {
-        const stockRef = doc(db, 'stock', `${visit.outletId}_${item.sku}`);
-        batch.set(stockRef, {
+        batch.set(doc(db, 'stock', `${visit.outletId}_${item.sku}`), {
           outletId: visit.outletId,
           outletName: visit.outletName,
           sku: item.sku,
@@ -489,29 +487,35 @@ export default function HomePage() {
           updatedAt: serverTimestamp(),
         }, { merge: true });
       }
+
       batch.update(doc(db, 'visits', activeVisitId), {
         sampling: {
           conducted: true,
           customersSampled: Number(samplingClosingCustomers),
-          bottlesSold: Object.values(soldBySku).reduce((sum, quantity) => sum + quantity, 0),
-          bottlesSoldBySku: soldBySku,
+          bottlesSold: closingStock.reduce((sum, item) => sum + item.bottlesSold, 0),
+          bottlesSoldBySku: Object.fromEntries(closingStock.map((item) => [item.sku, item.bottlesSold])),
           feedback: sampling.feedback.trim(),
           reason: '',
         },
         samplingClosingStock: closingStock,
+        orderPlaced: samplingOrderPlaced,
+        orderNotes: samplingOrderNotes.trim(),
         status: 'COMPLETED',
         stoppedAt: serverTimestamp(),
         durationMinutes,
         updatedAt: serverTimestamp(),
       });
+
       await batch.commit();
-      setVisitMessage('Sampling visit completed and saved. Remaining stock has been updated automatically.');
-      setActiveVisitId(null); setActiveVisitStartedAt(null); setActiveVisitElapsedSeconds(0); setVisitOpen(false); setVisitStep(1);
-      setVisit({ outletId: '', outletName: '', notes: '' });
+      setVisitMessage('Sampling session completed and saved. Closing stock has been updated automatically.');
+      setActiveVisitId(null); setActiveVisitStartedAt(null); setActiveVisitElapsedSeconds(0);
+      setVisitOpen(false); setVisitStep(1);
       setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
       setSamplingClosingCustomers('');
+      setSamplingOrderPlaced(null);
+      setSamplingOrderNotes('');
     } catch (err) {
-      setVisitMessage(err instanceof Error ? err.message : 'Unable to complete sampling visit.');
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to complete sampling session.');
     } finally { setSavingVisit(false); }
   }
 
@@ -586,7 +590,7 @@ export default function HomePage() {
     `}</style>
     <aside className="retailops-sidebar" style={styles.sidebar}>
       <Brand />
-      <nav style={styles.sideNav} aria-label="Main navigation">{navItems.map((item) => <NavButton key={item.label} item={item} active={activeNav === item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} />)}</nav>
+      <nav style={styles.sideNav} aria-label="Main navigation">{navItems.map((item) => <NavButton key={item.label} item={item} active={activeNav === item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits' && item.label !== 'Sampling') setVisitOpen(false); }} />)}</nav>
       <div style={styles.sidebarBottom}><UserCard user={user} /><button onClick={handleSignOut} disabled={busy} style={styles.signOutButton}>{busy ? 'Signing out…' : 'Sign out'}</button></div>
     </aside>
     <main className="retailops-main" style={styles.main}>
@@ -597,8 +601,9 @@ export default function HomePage() {
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
       {activeNav === 'Stock' && <StockLanding />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
-      {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
+      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
+      {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
   </div>;
@@ -606,6 +611,82 @@ export default function HomePage() {
 
 function LoginScreen({ busy, error, onSignIn }: { busy: boolean; error: string; onSignIn: () => void }) { return <main style={styles.loginPage}><section style={styles.loginCard}><div style={styles.eyebrow}>KWE & COLE</div><h1 style={styles.loginTitle}>RetailOps</h1><p style={styles.loginText}>Retail field operations, visits, stock and store activity in one place.</p><button onClick={onSignIn} disabled={busy} style={styles.googleButton}>{busy ? 'Signing in…' : 'Continue with Google'}</button>{error && <div role="alert" style={styles.error}>{error}</div>}</section></main>; }
 function Dashboard({ onNewVisit }: { onNewVisit: () => void }) { return <div><section className="retailops-welcome" style={styles.welcomeCard}><div><div style={styles.eyebrow}>FIELD OPERATIONS</div><h2 style={styles.welcomeTitle}>Good to see you.</h2><p style={styles.welcomeText}>Your RetailOps workspace is ready. Start by recording a store visit.</p></div><button onClick={onNewVisit} style={styles.primaryButton}>+ New Visit</button></section><section className="retailops-kpis" style={styles.kpiGrid}>{activity.map((item) => <article key={item.title} style={styles.kpiCard}><div style={styles.kpiLabel}>{item.title}</div><div style={styles.kpiValue}>{item.value}</div><div style={styles.kpiDetail}>{item.detail}</div></article>)}</section><section style={styles.sectionCard}><div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Today&apos;s activity</h2><p style={styles.sectionSubtitle}>Visit and store activity will appear here.</p></div><span style={styles.statusPill}>Ready</span></div><div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No activity recorded yet</strong><span>Once field reps begin visits, their activity will show here.</span></div></section></div>; }
+function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
+  onNewSamplingVisit: () => void;
+  onResume: (session: { id: string; data: Record<string, any> }) => void;
+  userUid: string;
+}) {
+  const [sessions, setSessions] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadSessions() {
+    setLoading(true);
+    try {
+      const snapshot = await getDocs(query(
+        collection(getFirebaseDb(), 'visits'),
+        where('repUid', '==', userUid)
+      ));
+      const loaded = snapshot.docs
+        .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
+        .filter((session) => session.data.visitType === 'SAMPLING_ONLY')
+        .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
+      setSessions(loaded.slice(0, 30));
+    } catch {
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadSessions(); }, []);
+
+  const active = sessions.filter((session) => session.data.status === 'STARTED');
+  const completed = sessions.filter((session) => session.data.status === 'COMPLETED').slice(0, 10);
+
+  return <section style={styles.sectionCard}>
+    <div style={styles.sectionHeader}>
+      <div><h2 style={styles.sectionTitle}>Sampling sessions</h2><p style={styles.sectionSubtitle}>Start a sampling session when you arrive. Close the specific session at the end of your shift.</p></div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => void loadSessions()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button onClick={onNewSamplingVisit} style={styles.darkButton}>◎ Start Sampling</button>
+      </div>
+    </div>
+
+    <div style={{ marginBottom: 18 }}>
+      <strong style={styles.checklistProgress}>Open sampling sessions</strong>
+      {active.length === 0
+        ? <div style={styles.emptyState}><span>No open sampling sessions.</span></div>
+        : <div style={styles.visitList}>{active.map((session) => {
+            const started = session.data.startedAt?.toDate?.();
+            return <article key={session.id} style={styles.visitRow}>
+              <div style={{ minWidth: 0 }}>
+                <strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong>
+                <div style={styles.visitMeta}>{started ? `Started ${started.toLocaleString()}` : 'Start time pending'} · Session ID {session.id.slice(0, 8)}</div>
+              </div>
+              <button onClick={() => onResume(session)} style={styles.darkButton}>Close session</button>
+            </article>;
+          })}</div>}
+    </div>
+
+    <div>
+      <strong style={styles.checklistProgress}>Recent completed sessions</strong>
+      {completed.length === 0
+        ? <div style={styles.emptyState}><span>No completed sampling sessions yet.</span></div>
+        : <div style={styles.visitList}>{completed.map((session) => {
+            const started = session.data.startedAt?.toDate?.();
+            const stopped = session.data.stoppedAt?.toDate?.();
+            return <article key={session.id} style={styles.visitRow}>
+              <div style={{ minWidth: 0 }}>
+                <strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong>
+                <div style={styles.visitMeta}>{started ? started.toLocaleString() : '—'} → {stopped ? stopped.toLocaleString() : '—'} · {session.data.durationMinutes ?? 0} min</div>
+              </div>
+              <span style={styles.statusPill}>COMPLETED</span>
+            </article>;
+          })}</div>}
+    </div>
+  </section>;
+}
+
 function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => void; onNewSamplingVisit: () => void }) {
   const [visits, setVisits] = useState<Array<{ id: string; outletName: string; repName: string; status: string; createdAt?: { toDate?: () => Date } }>>([]);
   const [loading, setLoading] = useState(true);
@@ -772,6 +853,10 @@ function VisitEntry({
   setSamplingClosingSales,
   samplingClosingCustomers,
   setSamplingClosingCustomers,
+  samplingOrderPlaced,
+  setSamplingOrderPlaced,
+  samplingOrderNotes,
+  setSamplingOrderNotes,
   activeVisitElapsedSeconds,
   activeVisitStartedAt,
   onSaveChecklist,
@@ -809,6 +894,10 @@ function VisitEntry({
   setSamplingClosingSales: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   samplingClosingCustomers: string;
   setSamplingClosingCustomers: React.Dispatch<React.SetStateAction<string>>;
+  samplingOrderPlaced: boolean | null;
+  setSamplingOrderPlaced: React.Dispatch<React.SetStateAction<boolean | null>>;
+  samplingOrderNotes: string;
+  setSamplingOrderNotes: React.Dispatch<React.SetStateAction<string>>;
   activeVisitElapsedSeconds: number;
   activeVisitStartedAt: Date | null;
   onSaveChecklist: () => void;
@@ -902,18 +991,28 @@ function VisitEntry({
       </label>
 
       <div style={styles.samplingStockBlock}>
-        <div><strong style={styles.checklistProgress}>Record bottles sold</strong><span style={styles.checklistProgressText}>Enter the bottles sold during the sampling activity. Remaining stock is opening stock minus sold stock.</span></div>
+        <div><strong style={styles.checklistProgress}>Record closing stock</strong><span style={styles.checklistProgressText}>Enter the stock remaining at the end of the sampling session. Bottles sold are calculated from opening stock minus closing stock.</span></div>
         {stockEntries.map((entry) => {
           const openingQty = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
-          const soldQty = samplingClosingSales[entry.sku] === '' ? 0 : Number(samplingClosingSales[entry.sku]);
-          const remaining = Math.max(0, openingQty - soldQty);
+          const remaining = samplingClosingSales[entry.sku] === '' ? 0 : Number(samplingClosingSales[entry.sku]);
+          const soldQty = Math.max(0, openingQty - remaining);
           return <div key={entry.sku} style={styles.samplingClosingRow}>
-            <div style={{ minWidth: 0, flex: 1 }}><strong style={styles.samplingProductName}>{entry.productName}</strong><span style={styles.samplingStockLabel}>Opening {openingQty} · Remaining {remaining}</span></div>
-            <input aria-label={`${entry.productName} bottles sold`} type="number" min="0" step="1" inputMode="numeric" value={samplingClosingSales[entry.sku] || ''} onChange={(e) => setSamplingClosingSales((current) => ({ ...current, [entry.sku]: e.target.value }))} placeholder="0" style={styles.samplingQuantity} />
+            <div style={{ minWidth: 0, flex: 1 }}><strong style={styles.samplingProductName}>{entry.productName}</strong><span style={styles.samplingStockLabel}>Opening {openingQty} · Sold {soldQty}</span></div>
+            <input aria-label={`${entry.productName} closing stock`} type="number" min="0" step="1" inputMode="numeric" value={samplingClosingSales[entry.sku] || ''} onChange={(e) => setSamplingClosingSales((current) => ({ ...current, [entry.sku]: e.target.value }))} placeholder="0" style={styles.samplingQuantity} />
           </div>;
         })}
       </div>
-      <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say?" rows={3} style={styles.reasonTextarea} /></label>
+            <div style={{ ...styles.samplingCard, marginTop: 14 }}>
+        <div style={styles.samplingQuestion}>
+          <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>Record whether the store placed an order during this sampling session.</span></div>
+          <div style={styles.answerGroup}>
+            <button type="button" aria-pressed={samplingOrderPlaced === true} onClick={() => setSamplingOrderPlaced(true)} style={{ ...styles.answerButton, ...(samplingOrderPlaced === true ? styles.answerButtonYesActive : {}) }}>✓ Yes</button>
+            <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
+          </div>
+        </div>
+        {samplingOrderPlaced === true && <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number, quantities or any useful details" rows={2} style={styles.reasonTextarea} /></label>}
+      </div>
+<label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say?" rows={3} style={styles.reasonTextarea} /></label>
       {message && <div style={styles.message}>{message}</div>}
       <div style={styles.formActions}>
         <button onClick={() => setVisitStep(2)} style={styles.secondaryButton}>← Back</button>
