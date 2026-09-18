@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { getFirebaseDb } from '@/lib/firebase/client';
+import { useState } from 'react';
+
+
 import VisitEvidenceSummary from './visit-evidence-summary';
 
 type Visit = Record<string, any>;
@@ -17,14 +17,6 @@ const checks = [
 
 export default function VisitDetail({ visit }: { visit: Visit }) {
   const [full, setFull] = useState<Visit>(visit);
-
-  useEffect(() => {
-    let mounted = true;
-    void getDocs(collection(getFirebaseDb(), 'visits')).then(() => {
-      // The parent already supplies the visit record; evidence is loaded separately.
-    }).catch(() => undefined);
-    return () => { mounted = false; void mounted; };
-  }, []);
 
   const checklist = full.checklist || {};
   const reasons = full.checklistReasons || {};
