@@ -111,7 +111,11 @@ export default function VisitEvidence({ user }: { user: User }) {
           {files.map((file) => (
             <a key={file.id} href={file.driveUrl || '#'} target="_blank" rel="noreferrer" style={styles.photoCard}>
               <div style={styles.thumbnail}>
-                <span style={styles.camera}>📷</span>
+                {file.thumbnailUrl ? (
+                  <img src={file.thumbnailUrl} alt={file.photoType} style={styles.thumbnailImage} />
+                ) : (
+                  <span style={styles.camera}>📷</span>
+                )}
                 <span style={styles.typeBadge}>{file.photoType}</span>
               </div>
               <div style={styles.photoFooter}>
