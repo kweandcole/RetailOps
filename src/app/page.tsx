@@ -106,8 +106,29 @@ export default function HomePage() {
   async function loadOrders() {
     if (!user) return;
     try {
-      const snapshot = await getDocs(query(collection(getFirebaseDb(), 'orders'), where('repUid', '==', user.uid)));
-      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)));
+      const [orderSnapshot, visitSnapshot] = await Promise.all([
+        getDocs(query(collection(getFirebaseDb(), 'orders'), where('repUid', '==', user.uid))),
+        getDocs(query(collection(getFirebaseDb(), 'visits'), where('repUid', '==', user.uid))),
+      ]);
+      const directOrders = orderSnapshot.docs.map((d) => ({ id: d.id, source: 'ORDER', ...d.data() }));
+      const visitOrders = visitSnapshot.docs
+        .map((d) => ({ id: d.id, source: 'VISIT', ...d.data() }))
+        .filter((v) => v.orderPlaced === true)
+        .map((v) => ({
+          id: v.id,
+          source: 'VISIT',
+          orderNumber: `VIS-${v.id.slice(0, 6)}`,
+          outletId: v.outletId,
+          outletName: v.outletName,
+          visitId: v.id,
+          repUid: v.repUid,
+          repName: v.repName,
+          status: v.status === 'COMPLETED' ? 'CAPTURED' : 'OPEN',
+          totalValue: Number(v.orderValue) || 0,
+          notes: v.orderNotes || '',
+          createdAt: v.createdAt,
+        }));
+      setOrders([...directOrders, ...visitOrders].sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)));
     } catch {
       setOrders([]);
     }
@@ -615,11 +636,11 @@ export default function HomePage() {
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
       {activeNav === 'Stock' && <StockLanding />}\n      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
-      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}\n      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
+      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
       {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && <PlaceholderSection title={activeNav} />}
     </main>
-    <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
+    <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
   </div>;
 }
 
@@ -1290,6 +1311,7 @@ function VisitEntry({
   </section>;
 }
 function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; onRefresh: () => Promise<void> }) {
+  const [selected, setSelected] = useState<Record<string, any> | null>(null);
   useEffect(() => { void onRefresh(); }, []);
 
   const open = orders.filter((o) => (o.status || 'CAPTURED') !== 'FULFILLED');
@@ -1297,7 +1319,7 @@ function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; o
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
-      <div><h2 style={styles.sectionTitle}>Orders</h2><p style={styles.sectionSubtitle}>Orders captured during store visits.</p></div>
+      <div><h2 style={styles.sectionTitle}>Orders</h2><p style={styles.sectionSubtitle}>Order opportunities captured during store visits.</p></div>
       <button onClick={() => void onRefresh()} style={styles.secondaryButton}>Refresh</button>
     </div>
     <div style={styles.kpiGrid}>
@@ -1305,14 +1327,24 @@ function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; o
       <div style={styles.kpiCard}><span style={styles.kpiLabel}>Open orders</span><strong style={styles.kpiValue}>{open.length}</strong></div>
       <div style={styles.kpiCard}><span style={styles.kpiLabel}>Recorded value</span><strong style={styles.kpiValue}>KSh {value.toLocaleString()}</strong></div>
     </div>
-    {orders.length === 0 ? <div style={styles.emptyState}><span>No orders captured yet.</span></div> :
-      <div style={styles.visitList}>{orders.map((order) => <article key={order.id} style={styles.visitRow}>
+    {orders.length === 0 ? <div style={styles.emptyState}><span>No orders captured yet.</span><span style={styles.muted}>Orders recorded as “Yes” in completed visits will appear here.</span></div> :
+      <div style={styles.visitList}>{orders.map((order) => <article key={order.id + order.source} style={styles.visitRow} onClick={() => setSelected(order)}>
         <div style={{ minWidth: 0 }}>
           <strong style={styles.visitStore}>{order.outletName || 'Store order'}</strong>
           <div style={styles.visitMeta}>{order.orderNumber || order.id.slice(0, 8)} · {order.status || 'CAPTURED'} · {order.totalValue ? `KSh ${Number(order.totalValue).toLocaleString()}` : 'Value not recorded'}</div>
         </div>
         <span style={styles.statusPill}>{order.status || 'CAPTURED'}</span>
       </article>)}</div>}
+    {selected && <div style={{ marginTop: 16, padding: 18, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fafaf8' }}>
+      <div style={styles.sectionHeader}><div><h3 style={styles.sectionTitle}>Order details</h3><p style={styles.sectionSubtitle}>{selected.outletName || 'Store'} · {selected.orderNumber || selected.id}</p></div><button onClick={() => setSelected(null)} style={styles.secondaryButton}>Close</button></div>
+      <div style={styles.formGrid}>
+        <div style={styles.infoBox}><span style={styles.fieldLabel}>Store</span><strong>{selected.outletName || '—'}</strong><span style={styles.muted}>{selected.outletId || 'No store ID'}</span></div>
+        <div style={styles.infoBox}><span style={styles.fieldLabel}>Visit</span><strong>{selected.visitId || selected.id}</strong><span style={styles.muted}>{selected.repName || '—'}</span></div>
+        <div style={styles.infoBox}><span style={styles.fieldLabel}>Status</span><strong>{selected.status || 'CAPTURED'}</strong></div>
+        <div style={styles.infoBox}><span style={styles.fieldLabel}>Order value</span><strong>{selected.totalValue ? `KSh ${Number(selected.totalValue).toLocaleString()}` : 'Not recorded'}</strong></div>
+      </div>
+      <div style={{ marginTop: 14 }}><span style={styles.fieldLabel}>Order notes / reference</span><p style={{ margin: '6px 0 0', fontSize: 13, lineHeight: 1.5 }}>{selected.notes || 'No order details were entered for this visit.'}</p></div>
+    </div>}
   </section>;
 }
 
