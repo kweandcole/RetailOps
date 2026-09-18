@@ -27,12 +27,26 @@ export default function StoresSection() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+  const [visitedToday, setVisitedToday] = useState<Set<string>>(new Set());
 
   async function loadStores() {
     setLoading(true); setError('');
     try {
-      const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
+      const db = getFirebaseDb();
+      const [snapshot, visitSnapshot] = await Promise.all([
+        getDocs(collection(db, 'outlets')),
+        getDocs(collection(db, 'visits')),
+      ]);
       const data = snapshot.docs.map((item) => ({ outletId: item.id, ...(item.data() as Omit<Store, 'outletId'>) }));
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const visited = new Set<string>();
+      visitSnapshot.docs.forEach((item) => {
+        const visit = item.data() as Record<string, any>;
+        const timestamp = visit.createdAt?.toDate?.() || visit.startedAt?.toDate?.();
+        if (visit.outletId && timestamp instanceof Date && timestamp >= startOfToday) visited.add(String(visit.outletId));
+      });
+      setVisitedToday(visited);
       setStores(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load stores from Firestore.');
@@ -67,11 +81,12 @@ export default function StoresSection() {
   const filteredStores = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return stores.filter((store) => {
-      const matchesFilter = filter === 'All' || store.status === filter;
+      const isVisited = visitedToday.has(store.outletId) || store.status === 'Visited';
+      const matchesFilter = filter === 'All' || (filter === 'Visited' ? isVisited : !isVisited);
       const matchesQuery = !normalized || `${store.branchName} ${store.retailer} ${store.location}`.toLowerCase().includes(normalized);
       return matchesFilter && matchesQuery;
     });
-  }, [filter, query, stores]);
+  }, [filter, query, stores, visitedToday]);
 
   return (
     <section>
@@ -92,7 +107,7 @@ export default function StoresSection() {
       <div style={styles.summary}>{loading ? 'Loading stores…' : `${filteredStores.length} stores shown`}</div>
       <div style={styles.list}>
         {!loading && filteredStores.map((store) => <article key={store.outletId} style={styles.card}>
-          <div style={styles.cardTop}><div><div style={styles.retailer}>{store.retailer}</div><h2 style={styles.branch}>{store.branchName}</h2><div style={styles.location}>{store.location}</div></div><span style={{ ...styles.status, ...(store.status === 'Visited' ? styles.statusVisited : styles.statusPending) }}>{store.status}</span></div>
+          <div style={styles.cardTop}><div><div style={styles.retailer}>{store.retailer}</div><h2 style={styles.branch}>{store.branchName}</h2><div style={styles.location}>{store.location}</div></div><span style={{ ...styles.status, ...(visitedToday.has(store.outletId) || store.status === 'Visited' ? styles.statusVisited : styles.statusPending) }}>{visitedToday.has(store.outletId) || store.status === 'Visited' ? 'Visited' : 'Pending'}</span></div>
           <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><div style={styles.cardActions}><button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button><button style={styles.visitButton}>Start visit</button></div></div>
           {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} />}
         </article>)}
