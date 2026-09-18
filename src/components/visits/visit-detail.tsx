@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-
+import { useEffect, useState } from 'react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { getFirebaseDb } from '@/lib/firebase/client';
 
 import VisitEvidenceSummary from './visit-evidence-summary';
 
@@ -17,6 +18,21 @@ const checks = [
 
 export default function VisitDetail({ visit }: { visit: Visit }) {
   const [full, setFull] = useState<Visit>(visit);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    setFull(visit);
+    setOrdersLoading(true);
+    void getDocs(query(collection(getFirebaseDb(), 'orders'), where('visitId', '==', visit.id)))
+      .then((snapshot) => {
+        if (mounted) setOrders(snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, any>) })));
+      })
+      .catch(() => { if (mounted) setOrders([]); })
+      .finally(() => { if (mounted) setOrdersLoading(false); });
+    return () => { mounted = false; };
+  }, [visit.id]);
 
   const checklist = full.checklist || {};
   const reasons = full.checklistReasons || {};
@@ -25,7 +41,7 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
   const stopped = full.stoppedAt?.toDate?.();
   const stock = Array.isArray(full.stockEntries) ? full.stockEntries : [];
   const expiry = Array.isArray(full.expiry) ? full.expiry : [];
-  const orderItems = Array.isArray(full.orderItems) ? full.orderItems : [];
+  const orderItems = orders.flatMap((order) => Array.isArray(order.items) ? order.items : []);
 
   return <div style={styles.panel}>
     <div style={styles.grid}>
@@ -63,10 +79,11 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
       {sampling.feedback && <p style={styles.text}>{sampling.feedback}</p>}
     </Block>}
 
-    {orderItems.length > 0 && <Block label="Order">
+    {ordersLoading && <Block label="Order"><p style={styles.text}>Loading order details…</p></Block>}
+    {!ordersLoading && orders.length > 0 && <Block label="Order">
       <div style={styles.list}>{orderItems.map((item: any) => <div key={item.sku} style={styles.row}><span>{item.productName}</span><strong>{item.quantity} × KSh {Number(item.unitPrice || 0).toLocaleString()}</strong></div>)}</div>
-      <p style={styles.total}>Total: KSh {Number(full.orderValue || orderItems.reduce((s: number, i: any) => s + Number(i.quantity || 0) * Number(i.unitPrice || 0), 0)).toLocaleString()}</p>
-      {full.orderNotes && <small>{full.orderNotes}</small>}
+      <p style={styles.total}>Total: KSh {Number(orders.reduce((s: number, order: any) => s + Number(order.totalValue || 0), 0)).toLocaleString()}</p>
+      {orders.map((order: any) => order.notes ? <small key={order.id}>{order.notes}</small> : null)}
     </Block>}
 
     <Block label="Photo evidence"><VisitEvidenceSummary visitId={full.id} /></Block>
