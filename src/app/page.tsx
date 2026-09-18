@@ -153,7 +153,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -216,6 +216,7 @@ function VisitEntry({
   setVisitStep,
   checklist,
   setChecklist,
+  setVisitMessage,
   gpsStatus,
   onCaptureGps,
   onSave,
@@ -230,6 +231,7 @@ function VisitEntry({
   setVisitStep: React.Dispatch<React.SetStateAction<number>>;
   checklist: VisitChecklist;
   setChecklist: React.Dispatch<React.SetStateAction<VisitChecklist>>;
+  setVisitMessage: React.Dispatch<React.SetStateAction<string>>;
   gpsStatus: string;
   onCaptureGps: () => void;
   onSave: () => void;
