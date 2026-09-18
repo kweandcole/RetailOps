@@ -359,6 +359,7 @@ export default function HomePage() {
     if (!activeVisitId) { setVisitMessage('Start the visit before saving sampling information.'); return; }
     if (sampling.conducted === null) { setVisitMessage('Please indicate whether sampling was conducted.'); return; }
     if (sampling.conducted === false && !sampling.reason.trim()) { setVisitMessage('Please enter a reason when sampling was not conducted.'); return; }
+    if (samplingOrderPlaced === null) { setVisitMessage('Please indicate whether an order was placed.'); return; }
     const numericFields = [sampling.customersSampled, ...Object.values(sampling.bottlesSoldBySku)];
     if (sampling.conducted && (
       sampling.customersSampled === '' ||
@@ -384,6 +385,8 @@ export default function HomePage() {
           feedback: sampling.feedback.trim(),
           reason: sampling.conducted ? '' : sampling.reason.trim(),
         },
+        orderPlaced: samplingOrderPlaced,
+        orderNotes: samplingOrderNotes.trim(),
         updatedAt: serverTimestamp(),
       });
       setVisitStep(6);
@@ -1236,7 +1239,17 @@ function VisitEntry({
               </label>;
             })}
           </div>
-          <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say? What products did they respond to?" rows={3} style={styles.reasonTextarea} /></label>
+          <div style={{ ...styles.samplingCard, marginTop: 14 }}>
+          <div style={styles.samplingQuestion}>
+            <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>Record whether the store placed an order during this visit.</span></div>
+            <div style={styles.answerGroup}>
+              <button type="button" aria-pressed={samplingOrderPlaced === true} onClick={() => setSamplingOrderPlaced(true)} style={{ ...styles.answerButton, ...(samplingOrderPlaced === true ? styles.answerButtonYesActive : {}) }}>✓ Yes</button>
+              <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
+            </div>
+          </div>
+          {samplingOrderPlaced === true && <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number, quantities or useful details" rows={2} style={styles.reasonTextarea} /></label>}
+        </div>
+        <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say? What products did they respond to?" rows={3} style={styles.reasonTextarea} /></label>
         </>}
         {sampling.conducted === false && <label style={styles.reasonField}><span style={styles.reasonLabel}>Why was sampling not conducted?</span><textarea value={sampling.reason} onChange={(e) => setSampling((current) => ({ ...current, reason: e.target.value }))} placeholder="Enter the reason" rows={2} style={styles.reasonTextarea} /></label>}
       </div>
