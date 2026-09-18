@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebase/client';
 import StoresSection from '@/components/stores/stores-section';
 
@@ -99,6 +99,64 @@ export default function HomePage() {
       return undefined;
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    async function restoreActiveSamplingVisit() {
+      try {
+        const db = getFirebaseDb();
+        const snapshot = await getDocs(query(
+          collection(db, 'visits'),
+          where('repUid', '==', user.uid)
+        ));
+        if (cancelled) return;
+
+        const active = snapshot.docs
+          .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
+          .filter(({ data }) => data.status === 'STARTED' && data.visitType === 'SAMPLING_ONLY')
+          .sort((a, b) => {
+            const aMs = a.data.startedAt?.toMillis?.() ?? 0;
+            const bMs = b.data.startedAt?.toMillis?.() ?? 0;
+            return bMs - aMs;
+          })[0];
+
+        if (!active) return;
+
+        const data = active.data;
+        const startedAt = data.startedAt?.toDate?.();
+        const openingStock = Array.isArray(data.openingStock) ? data.openingStock : [];
+
+        setActiveVisitId(active.id);
+        setActiveVisitStartedAt(startedAt instanceof Date ? startedAt : new Date());
+        setActiveVisitElapsedSeconds(startedAt instanceof Date ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) : 0);
+        setVisitMode('SAMPLING_ONLY');
+        setVisitOpen(true);
+        setActiveNav('Visits');
+        setVisitStep(2);
+        setVisit({
+          outletId: data.outletId || '',
+          outletName: data.outletName || '',
+          notes: data.notes || '',
+        });
+        if (openingStock.length > 0) {
+          setStockEntries(openingStock.map((entry: { sku: string; productName: string; shelfStock?: number; backStock?: number }) => ({
+            sku: entry.sku,
+            productName: entry.productName,
+            shelfStock: String(entry.shelfStock ?? 0),
+            backStock: String(entry.backStock ?? 0),
+          })));
+        }
+        setVisitMessage('Active sampling visit restored. The timer reflects the original start time, even if the browser was closed.');
+      } catch (err) {
+        if (!cancelled) setVisitMessage(err instanceof Error ? err.message : 'Unable to restore active sampling visit.');
+      }
+    }
+
+    void restoreActiveSamplingVisit();
+    return () => { cancelled = true; };
+  }, [user]);
 
   async function handleSignIn() {
     setBusy(true); setError('');
@@ -215,7 +273,8 @@ export default function HomePage() {
         createdAt: serverTimestamp(),
       });
       setActiveVisitId(visitRef.id);
-      setActiveVisitStartedAt(new Date());
+      const startedAt = new Date();
+      setActiveVisitStartedAt(startedAt);
       setActiveVisitElapsedSeconds(0);
       setVisitStep(2);
       setVisitMessage('Sampling visit started. Complete the sampling activity, then record the bottles sold before completing the visit.');
