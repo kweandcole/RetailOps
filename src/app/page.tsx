@@ -376,7 +376,7 @@ function VisitEntry({
           {visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : visitStep === 3 ? 'Count the Kwe & Cole products available in the store.' : 'The visit remains active while you complete the remaining tasks.'}
         </p>
       </div>
-      {visitStep !== 3 && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
+      {visitStep !== 4 && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
     </div>
 
     {visitStep === 1 && <>
@@ -472,7 +472,7 @@ function VisitEntry({
       </div>
     </>}
 
-    {visitStep === 4 && <>
+    {visitStep === 3 && <>
       <div style={styles.stockIntro}>
         <div>
           <strong style={styles.checklistProgress}>4 SKUs to count</strong>
@@ -515,11 +515,11 @@ function VisitEntry({
       </div>
     </>}
     
-    {visitStep === 3 && <>
+    {visitStep === 4 && <>
       <div style={styles.activeVisitCard}>
         <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
         <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
-        <p style={styles.activeVisitText}>The visit timer started when you tapped Start Visit. Stock, expiry, sampling and feedback will be added here next.</p>
+        <p style={styles.activeVisitText}>The visit timer started when you tapped Start Visit. Expiry, sampling and feedback will be added here next.</p>
         <div style={styles.formActions}>
           <button onClick={onStop} disabled={saving} style={styles.stopButton}>{saving ? 'Stopping…' : 'Stop Visit'}</button>
         </div>
