@@ -1310,6 +1310,7 @@ function VisitEntry({
             <button type="button" aria-pressed={sampling.conducted === false} onClick={() => setSampling((current) => ({ ...current, conducted: false }))} style={{ ...styles.answerButton, ...(sampling.conducted === false ? styles.answerButtonNoActive : {}) }}>× No</button>
           </div>
         </div>
+
         {sampling.conducted === true && <>
           <div style={styles.samplingMetrics}>
             <label style={styles.stockField}><span style={styles.fieldLabel}>Customers sampled</span><input type="number" min="0" step="1" inputMode="numeric" value={sampling.customersSampled} onChange={(e) => setSampling((current) => ({ ...current, customersSampled: e.target.value }))} placeholder="0" style={styles.stockInput} /></label>
@@ -1328,27 +1329,32 @@ function VisitEntry({
               </label>;
             })}
           </div>
-          <div style={{ ...styles.samplingCard, marginTop: 14 }}>
-          <div style={styles.samplingQuestion}>
-            <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>Record whether the store placed an order during this visit.</span></div>
-            <div style={styles.answerGroup}>
-              <button type="button" aria-pressed={samplingOrderPlaced === true} onClick={() => setSamplingOrderPlaced(true)} style={{ ...styles.answerButton, ...(samplingOrderPlaced === true ? styles.answerButtonYesActive : {}) }}>✓ Yes</button>
-              <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
-            </div>
+          <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say? What products did they respond to?" rows={3} style={styles.reasonTextarea} /></label>
+        </>}
+
+        {sampling.conducted === false && <label style={styles.reasonField}><span style={styles.reasonLabel}>Why was sampling not conducted?</span><textarea value={sampling.reason} onChange={(e) => setSampling((current) => ({ ...current, reason: e.target.value }))} placeholder="Enter the reason" rows={2} style={styles.reasonTextarea} /></label>}
+      </div>
+
+      <div style={{ ...styles.samplingCard, marginTop: 14 }}>
+        <div style={styles.samplingQuestion}>
+          <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>This is independent of sampling. Record any order placed by the store during the visit.</span></div>
+          <div style={styles.answerGroup}>
+            <button type="button" aria-pressed={samplingOrderPlaced === true} onClick={() => setSamplingOrderPlaced(true)} style={{ ...styles.answerButton, ...(samplingOrderPlaced === true ? styles.answerButtonYesActive : {}) }}>✓ Yes</button>
+            <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); resetOrderItems(); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
           </div>
-          {samplingOrderPlaced === true && <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number, quantities or useful details" rows={2} style={styles.reasonTextarea} /></label>}
-          {samplingOrderPlaced === true && <div style={{ ...styles.samplingCard, marginTop: 12 }}>
+        </div>
+        {samplingOrderPlaced === true && <>
+          <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number, customer PO or useful notes" rows={2} style={styles.reasonTextarea} /></label>
+          <div style={{ ...styles.samplingCard, marginTop: 12 }}>
             <strong style={styles.reasonLabel}>Order items</strong>
+            <span style={styles.checklistProgressText}>Enter quantity and unit price for each SKU ordered.</span>
             {orderItems.map((item) => <div key={item.sku} style={styles.orderItemRow}>
               <span style={styles.samplingProductName}>{item.productName}</span>
               <input aria-label={`${item.productName} quantity`} type="number" min="0" step="1" inputMode="numeric" value={item.quantity} onChange={(e) => setOrderItems((current) => current.map((x) => x.sku === item.sku ? { ...x, quantity: e.target.value } : x))} placeholder="Qty" style={styles.samplingQuantity} />
-              <input aria-label={`${item.productName} unit price`} type="number" min="0" step="1" inputMode="numeric" value={item.unitPrice} onChange={(e) => setOrderItems((current) => current.map((x) => x.sku === item.sku ? { ...x, unitPrice: e.target.value } : x))} style={styles.samplingQuantity} />
+              <input aria-label={`${item.productName} unit price`} type="number" min="0" step="1" inputMode="numeric" value={item.unitPrice} onChange={(e) => setOrderItems((current) => current.map((x) => x.sku === item.sku ? { ...x, unitPrice: e.target.value } : x))} placeholder="Price" style={styles.samplingQuantity} />
             </div>)}
-          </div>}
-        </div>
-        <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say? What products did they respond to?" rows={3} style={styles.reasonTextarea} /></label>
+          </div>
         </>}
-        {sampling.conducted === false && <label style={styles.reasonField}><span style={styles.reasonLabel}>Why was sampling not conducted?</span><textarea value={sampling.reason} onChange={(e) => setSampling((current) => ({ ...current, reason: e.target.value }))} placeholder="Enter the reason" rows={2} style={styles.reasonTextarea} /></label>}
       </div>
       {message && <div style={styles.message}>{message}</div>}
       <div style={styles.formActions}>
