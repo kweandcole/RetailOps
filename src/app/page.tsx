@@ -620,7 +620,7 @@ export default function HomePage() {
         .retailops-header { margin-bottom: 20px !important; }
         .retailops-mobile-brand { display: block !important; font-size: 10px; font-weight: 800; letter-spacing: 1.7px; margin-bottom: 4px; }
         .retailops-header-user { display: none !important; }
-        .retailops-bottom-nav { display: grid !important; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(255,255,255,.98); border-top: 1px solid #e7e5e0; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); box-sizing: border-box; box-shadow: 0 -4px 18px rgba(0,0,0,.06); }
+        .retailops-bottom-nav { display: grid !important; grid-template-columns: repeat(6, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: rgba(255,255,255,.98); border-top: 1px solid #e7e5e0; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); box-sizing: border-box; box-shadow: 0 -4px 18px rgba(0,0,0,.06); }
         .retailops-bottom-button { min-width: 0; }
         .retailops-welcome { flex-direction: column !important; align-items: flex-start !important; }
         .retailops-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -639,10 +639,11 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Stock' && <StockLanding />}\n      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
+      {activeNav === 'Stock' && <StockLanding />}
+      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
       {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
-      {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && <PlaceholderSection title={activeNav} />}
+      {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && activeNav !== 'Stock' && activeNav !== 'Orders' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
   </div>;
