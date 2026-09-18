@@ -18,7 +18,9 @@ type Store = {
   active?: boolean;
 };
 
-export default function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }\n\nexport default function StoresSection() {
+function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }
+
+export default function StoresSection() {
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'All' | StoreStatus>('All');
