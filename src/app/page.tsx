@@ -8,13 +8,9 @@ import StoresSection from '@/components/stores/stores-section';
 type NavItem = { label: string; icon: string };
 type Outlet = { outletId: string; outletName?: string; retailer?: string; city?: string; branch?: string };
 type VisitDraft = { outletId: string; outletName: string; notes: string };
-type VisitChecklist = {
-  displayPresent: boolean | null;
-  productsWellDisplayed: boolean | null;
-  priceVisible: boolean | null;
-  staffEngaged: boolean | null;
-  competitorActivity: boolean | null;
-};
+type ChecklistKey = 'displayPresent' | 'productsWellDisplayed' | 'priceVisible' | 'staffEngaged' | 'competitorActivity';
+type VisitChecklist = Record<ChecklistKey, boolean | null>;
+type VisitReasons = Record<ChecklistKey, string>;
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: '⌂' }, { label: 'Visits', icon: '✓' }, { label: 'Stores', icon: '▣' },
   { label: 'Sampling', icon: '◎' }, { label: 'Stock', icon: '▤' }, { label: 'Orders', icon: '▱' },
@@ -36,16 +32,17 @@ export default function HomePage() {
   const [visit, setVisit] = useState<VisitDraft>({ outletId: '', outletName: '', notes: '' });
   const [visitStep, setVisitStep] = useState(1);
   const [checklist, setChecklist] = useState<VisitChecklist>({
-    displayPresent: null,
-    productsWellDisplayed: null,
-    priceVisible: null,
-    staffEngaged: null,
-    competitorActivity: null,
+    displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null,
+  });
+  const [checklistReasons, setChecklistReasons] = useState<VisitReasons>({
+    displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '',
   });
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracyMeters: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState('Not captured');
   const [savingVisit, setSavingVisit] = useState(false);
   const [visitMessage, setVisitMessage] = useState('');
+  const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
+  const [activeVisitStartedAt, setActiveVisitStartedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     try {
@@ -74,6 +71,7 @@ export default function HomePage() {
   async function openNewVisit() {
     setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured'); setVisitStep(1);
     setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
+    setChecklistReasons({ displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '' });
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
@@ -98,6 +96,36 @@ export default function HomePage() {
     );
   }
 
+  async function stopVisit() {
+    if (!activeVisitId) {
+      setVisitMessage('No active visit is currently running.');
+      return;
+    }
+    setSavingVisit(true); setVisitMessage('');
+    try {
+      const now = Date.now();
+      const startedMs = activeVisitStartedAt?.getTime();
+      const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
+      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+        status: 'COMPLETED',
+        stoppedAt: serverTimestamp(),
+        durationMinutes,
+        updatedAt: serverTimestamp(),
+      });
+      setVisitMessage('Visit stopped and saved.');
+      setActiveVisitId(null);
+      setActiveVisitStartedAt(null);
+      setVisitOpen(false);
+      setVisitStep(1);
+      setVisit({ outletId: '', outletName: '', notes: '' });
+      setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
+      setChecklistReasons({ displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '' });
+      setGps(null); setGpsStatus('Not captured');
+    } catch (err) {
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to stop visit.');
+    } finally { setSavingVisit(false); }
+  }
+
   async function saveVisit() {
     if (!visit.outletId) { setVisitMessage('Please select a store.'); return; }
     setSavingVisit(true); setVisitMessage('');
@@ -110,15 +138,15 @@ export default function HomePage() {
         status: 'STARTED',
         notes: visit.notes,
         checklist,
+        checklistReasons,
         gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
         startedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       });
-      setVisitMessage('Visit saved successfully.');
-      setVisit({ outletId: '', outletName: '', notes: '' });
-      setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
-      setVisitStep(1);
-      setGps(null); setGpsStatus('Not captured');
+      setActiveVisitId(visitRef.id);
+      setActiveVisitStartedAt(new Date());
+      setVisitStep(3);
+      setVisitMessage('Visit started. Complete the visit, then tap Stop Visit when you leave the store.');
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to save visit.');
     } finally { setSavingVisit(false); }
@@ -153,7 +181,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -216,6 +244,8 @@ function VisitEntry({
   setVisitStep,
   checklist,
   setChecklist,
+  checklistReasons,
+  setChecklistReasons,
   setVisitMessage,
   gpsStatus,
   onCaptureGps,
@@ -231,6 +261,8 @@ function VisitEntry({
   setVisitStep: React.Dispatch<React.SetStateAction<number>>;
   checklist: VisitChecklist;
   setChecklist: React.Dispatch<React.SetStateAction<VisitChecklist>>;
+  checklistReasons: VisitReasons;
+  setChecklistReasons: React.Dispatch<React.SetStateAction<VisitReasons>>;
   setVisitMessage: React.Dispatch<React.SetStateAction<string>>;
   gpsStatus: string;
   onCaptureGps: () => void;
