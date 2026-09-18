@@ -20,6 +20,7 @@ type SamplingDraft = {
   feedback: string;
   reason: string;
 };
+type VisitMode = 'STANDARD' | 'SAMPLING_ONLY';
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: '⌂' }, { label: 'Visits', icon: '✓' }, { label: 'Stores', icon: '▣' },
   { label: 'Sampling', icon: '◎' }, { label: 'Stock', icon: '▤' }, { label: 'Orders', icon: '▱' },
@@ -37,6 +38,7 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [activeNav, setActiveNav] = useState('Dashboard');
   const [visitOpen, setVisitOpen] = useState(false);
+  const [visitMode, setVisitMode] = useState<VisitMode>('STANDARD');
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [visit, setVisit] = useState<VisitDraft>({ outletId: '', outletName: '', notes: '' });
   const [visitStep, setVisitStep] = useState(1);
@@ -73,6 +75,9 @@ export default function HomePage() {
     bottlesSoldBySku: { 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' },
     feedback: '',
     reason: '',
+  });
+  const [samplingClosingSales, setSamplingClosingSales] = useState<Record<string, string>>({
+    'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '',
   });  useEffect(() => {
     if (!activeVisitStartedAt) {
       setActiveVisitElapsedSeconds(0);
@@ -109,6 +114,7 @@ export default function HomePage() {
   }
 
   async function openNewVisit() {
+    setVisitMode('STANDARD');
     setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured'); setVisitStep(1);
     setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
     setChecklistReasons({ displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '' });
@@ -136,6 +142,33 @@ export default function HomePage() {
     }
   }
 
+  async function openSamplingVisit() {
+    setVisitMode('SAMPLING_ONLY');
+    setVisitOpen(true);
+    setActiveNav('Visits');
+    setVisitMessage('');
+    setGps(null);
+    setGpsStatus('Not captured');
+    setVisitStep(1);
+    setVisit({ outletId: '', outletName: '', notes: '' });
+    setStockEntries([
+      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
+      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
+    ]);
+    setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
+    if (outlets.length === 0) {
+      try {
+        const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
+        const loaded = snapshot.docs.map((doc) => ({ ...(doc.data() as Outlet), outletId: doc.id })).sort((a, b) => (a.retailer || '').localeCompare(b.retailer || '') || (a.branch || a.outletName || '').localeCompare(b.branch || b.outletName || ''));
+        setOutlets(loaded);
+      } catch (err) {
+        setVisitMessage(err instanceof Error ? err.message : 'Unable to load stores.');
+      }
+    }
+  }
+
   function captureGps() {
     if (!navigator.geolocation) { setGpsStatus('GPS is not supported on this device'); return; }
     setGpsStatus('Capturing…');
@@ -147,6 +180,46 @@ export default function HomePage() {
       (err) => setGpsStatus(err.code === 1 ? 'Location permission denied' : 'Unable to capture location'),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
+  }
+
+  async function startSamplingVisit() {
+    if (!visit.outletId) { setVisitMessage('Please select a store.'); return; }
+    const hasInvalid = stockEntries.some((entry) =>
+      (entry.shelfStock !== '' && (!Number.isInteger(Number(entry.shelfStock)) || Number(entry.shelfStock) < 0)) ||
+      (entry.backStock !== '' && (!Number.isInteger(Number(entry.backStock)) || Number(entry.backStock) < 0))
+    );
+    if (hasInvalid) { setVisitMessage('Opening stock quantities must be whole numbers of 0 or more.'); return; }
+    setSavingVisit(true); setVisitMessage('');
+    try {
+      const openingStock = stockEntries.map((entry) => ({
+        sku: entry.sku,
+        productName: entry.productName,
+        shelfStock: entry.shelfStock === '' ? 0 : Number(entry.shelfStock),
+        backStock: entry.backStock === '' ? 0 : Number(entry.backStock),
+        totalStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)),
+      }));
+      const visitRef = await addDoc(collection(getFirebaseDb(), 'visits'), {
+        visitType: 'SAMPLING_ONLY',
+        outletId: visit.outletId,
+        outletName: visit.outletName,
+        repUid: user?.uid || '',
+        repName: user?.displayName || user?.email || 'Field rep',
+        status: 'STARTED',
+        notes: visit.notes,
+        gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
+        openingStock,
+        sampling: { conducted: true, customersSampled: 0, bottlesSold: 0, bottlesSoldBySku: {}, feedback: '', reason: '' },
+        startedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+      setActiveVisitId(visitRef.id);
+      setActiveVisitStartedAt(new Date());
+      setActiveVisitElapsedSeconds(0);
+      setVisitStep(2);
+      setVisitMessage('Sampling visit started. Complete the sampling activity, then record the bottles sold before completing the visit.');
+    } catch (err) {
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to start sampling visit.');
+    } finally { setSavingVisit(false); }
   }
 
   async function startVisit() {
@@ -297,6 +370,52 @@ export default function HomePage() {
     } finally { setSavingVisit(false); }
   }
 
+  async function completeSamplingVisit() {
+    if (!activeVisitId) { setVisitMessage('No active sampling visit is currently running.'); return; }
+    const invalid = Object.values(samplingClosingSales).some((value) => value !== '' && (!Number.isInteger(Number(value)) || Number(value) < 0));
+    if (invalid) { setVisitMessage('Bottles sold must be whole numbers of 0 or more.'); return; }
+    const soldBySku = Object.fromEntries(Object.entries(samplingClosingSales).map(([sku, value]) => [sku, value === '' ? 0 : Number(value)]));
+    const opening = stockEntries.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.sku] = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
+      return acc;
+    }, {});
+    const hasOversold = Object.entries(soldBySku).some(([sku, sold]) => sold > (opening[sku] || 0));
+    if (hasOversold) { setVisitMessage('Bottles sold cannot be greater than the opening stock.'); return; }
+    if (!window.confirm('Complete this sampling visit and save the sold stock?')) return;
+    setSavingVisit(true); setVisitMessage('');
+    try {
+      const closingStock = stockEntries.map((entry) => {
+        const openingQty = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
+        const soldQty = soldBySku[entry.sku] || 0;
+        return { sku: entry.sku, productName: entry.productName, openingStock: openingQty, bottlesSold: soldQty, remainingStock: openingQty - soldQty };
+      });
+      const now = Date.now();
+      const startedMs = activeVisitStartedAt?.getTime();
+      const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
+      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+        sampling: {
+          conducted: true,
+          customersSampled: 0,
+          bottlesSold: Object.values(soldBySku).reduce((sum, quantity) => sum + quantity, 0),
+          bottlesSoldBySku: soldBySku,
+          feedback: sampling.feedback.trim(),
+          reason: '',
+        },
+        samplingClosingStock: closingStock,
+        status: 'COMPLETED',
+        stoppedAt: serverTimestamp(),
+        durationMinutes,
+        updatedAt: serverTimestamp(),
+      });
+      setVisitMessage('Sampling visit completed and saved.');
+      setActiveVisitId(null); setActiveVisitStartedAt(null); setActiveVisitElapsedSeconds(0); setVisitOpen(false); setVisitStep(1);
+      setVisit({ outletId: '', outletName: '', notes: '' });
+      setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
+    } catch (err) {
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to complete sampling visit.');
+    } finally { setSavingVisit(false); }
+  }
+
   async function stopVisit() {
     if (!activeVisitId) {
       setVisitMessage('No active visit is currently running.');
@@ -319,6 +438,7 @@ export default function HomePage() {
       setActiveVisitStartedAt(null);
       setActiveVisitElapsedSeconds(0);
       setVisitOpen(false);
+      setVisitMode('STANDARD');
       setVisitStep(1);
       setVisit({ outletId: '', outletName: '', notes: '' });
       setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
@@ -377,7 +497,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -386,7 +506,7 @@ export default function HomePage() {
 
 function LoginScreen({ busy, error, onSignIn }: { busy: boolean; error: string; onSignIn: () => void }) { return <main style={styles.loginPage}><section style={styles.loginCard}><div style={styles.eyebrow}>KWE & COLE</div><h1 style={styles.loginTitle}>RetailOps</h1><p style={styles.loginText}>Retail field operations, visits, stock and store activity in one place.</p><button onClick={onSignIn} disabled={busy} style={styles.googleButton}>{busy ? 'Signing in…' : 'Continue with Google'}</button>{error && <div role="alert" style={styles.error}>{error}</div>}</section></main>; }
 function Dashboard({ onNewVisit }: { onNewVisit: () => void }) { return <div><section className="retailops-welcome" style={styles.welcomeCard}><div><div style={styles.eyebrow}>FIELD OPERATIONS</div><h2 style={styles.welcomeTitle}>Good to see you.</h2><p style={styles.welcomeText}>Your RetailOps workspace is ready. Start by recording a store visit.</p></div><button onClick={onNewVisit} style={styles.primaryButton}>+ New Visit</button></section><section className="retailops-kpis" style={styles.kpiGrid}>{activity.map((item) => <article key={item.title} style={styles.kpiCard}><div style={styles.kpiLabel}>{item.title}</div><div style={styles.kpiValue}>{item.value}</div><div style={styles.kpiDetail}>{item.detail}</div></article>)}</section><section style={styles.sectionCard}><div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Today&apos;s activity</h2><p style={styles.sectionSubtitle}>Visit and store activity will appear here.</p></div><span style={styles.statusPill}>Ready</span></div><div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No activity recorded yet</strong><span>Once field reps begin visits, their activity will show here.</span></div></section></div>; }
-function VisitsLanding({ onNewVisit }: { onNewVisit: () => void }) {
+function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => void; onNewSamplingVisit: () => void }) {
   const [visits, setVisits] = useState<Array<{ id: string; outletName: string; repName: string; status: string; createdAt?: { toDate?: () => Date } }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -415,7 +535,10 @@ function VisitsLanding({ onNewVisit }: { onNewVisit: () => void }) {
       <div><h2 style={styles.sectionTitle}>Store visits</h2><p style={styles.sectionSubtitle}>Recent field visits and visit status.</p></div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => void loadVisits()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
-        <button onClick={onNewVisit} style={styles.darkButton}>+ New Visit</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={onNewVisit} style={styles.darkButton}>+ New Visit</button>
+          <button onClick={onNewSamplingVisit} style={styles.secondaryButton}>◎ Sampling Visit</button>
+        </div>
       </div>
     </div>
     {loading && visits.length === 0 ? <div style={styles.emptyState}><strong>Loading visits…</strong></div> :
@@ -442,6 +565,7 @@ function formatDuration(totalSeconds: number) {
 }
 
 function VisitEntry({
+  visitMode,
   outlets,
   visit,
   setVisit,
@@ -470,6 +594,7 @@ function VisitEntry({
   message,
   onClose,
 }: {
+  visitMode: VisitMode;
   outlets: Outlet[];
   visit: VisitDraft;
   setVisit: React.Dispatch<React.SetStateAction<VisitDraft>>;
@@ -489,6 +614,10 @@ function VisitEntry({
   gpsStatus: string;
   onCaptureGps: () => void;
   onStart: () => void;
+  onStartSampling: () => void;
+  onCompleteSampling: () => void;
+  samplingClosingSales: Record<string, string>;
+  setSamplingClosingSales: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onSaveChecklist: () => void;
   onSaveStock: () => void;
   onSaveExpiry: () => void;
@@ -516,18 +645,84 @@ function VisitEntry({
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
       <div>
-        <div style={styles.eyebrow}>STORE VISIT · STEP {visitStep} OF 6</div>
+        <div style={styles.eyebrow}>{visitMode === 'SAMPLING_ONLY' ? 'SAMPLING VISIT' : 'STORE VISIT'} · STEP {visitStep} OF {visitMode === 'SAMPLING_ONLY' ? 3 : 6}</div>
         <h2 style={styles.sectionTitle}>
-          {visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : visitStep === 3 ? 'Stock count' : visitStep === 4 ? 'Expiry check' : visitStep === 5 ? 'Sampling' : 'Visit in progress'}
+          {visitMode === 'SAMPLING_ONLY' ? (visitStep === 1 ? 'Start sampling visit' : visitStep === 2 ? 'Sampling in progress' : 'Record sampling sales') : (visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : visitStep === 3 ? 'Stock count' : visitStep === 4 ? 'Expiry check' : visitStep === 5 ? 'Sampling' : 'Visit in progress')}
         </h2>
         <p style={styles.sectionSubtitle}>
-          {visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : visitStep === 3 ? 'Count the Kwe & Cole products available in the store.' : visitStep === 4 ? 'Record any stock that is close to expiry.' : visitStep === 5 ? 'Record the results of any sampling or store activation.' : 'The visit remains active while you complete the remaining tasks.'}
+          {visitMode === 'SAMPLING_ONLY' ? (visitStep === 1 ? 'Select the store, capture GPS and record the stock you take for the sampling activity.' : visitStep === 2 ? 'The sampling session is active. The timer records time spent in the store.' : 'Enter the bottles sold for each SKU. Remaining stock is calculated automatically.') : (visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : visitStep === 3 ? 'Count the Kwe & Cole products available in the store.' : visitStep === 4 ? 'Record any stock that is close to expiry.' : visitStep === 5 ? 'Record the results of any sampling or store activation.' : 'The visit remains active while you complete the remaining tasks.')}
         </p>
       </div>
-      {visitStep !== 5 && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
+      {(visitMode === 'SAMPLING_ONLY' ? visitStep !== 2 : visitStep !== 5) && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
     </div>
 
-    {visitStep === 1 && <>
+    {visitMode === 'SAMPLING_ONLY' && visitStep === 1 && <>
+      <div style={styles.formGrid}>
+        <label style={styles.field}>
+          <span style={styles.fieldLabel}>Store</span>
+          <select value={visit.outletId} onChange={(e) => {
+            const selected = outlets.find((o) => o.outletId === e.target.value);
+            setVisit({ ...visit, outletId: e.target.value, outletName: selected?.retailer ? `${selected.retailer} - ${selected.branch || selected.outletName || e.target.value}` : (selected?.branch || selected?.outletName || e.target.value) });
+          }} style={styles.input}>
+            <option value="">Select a store</option>
+            {outlets.map((outlet) => <option key={outlet.outletId} value={outlet.outletId}>{outlet.retailer ? `${outlet.retailer} - ${outlet.branch || outlet.outletName || outlet.outletId}` : (outlet.branch || outlet.outletName || outlet.outletId)}</option>)}
+          </select>
+        </label>
+        <div style={styles.infoBox}>
+          <span style={styles.fieldLabel}>GPS location</span><strong>{gpsStatus}</strong><button type="button" onClick={onCaptureGps} style={styles.smallButton}>Capture GPS</button>
+        </div>
+        <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+          <span style={styles.fieldLabel}>Sampling notes</span>
+          <textarea value={visit.notes} onChange={(e) => setVisit({ ...visit, notes: e.target.value })} placeholder="Optional sampling notes" rows={3} style={styles.textarea} />
+        </label>
+      </div>
+      <div style={styles.samplingStockBlock}>
+        <div><strong style={styles.checklistProgress}>Opening stock taken to sampling</strong><span style={styles.checklistProgressText}>Enter the number of bottles available at the start of the sampling activity.</span></div>
+        {stockEntries.map((entry) => <div key={entry.sku} style={styles.samplingOpeningRow}>
+          <span style={styles.samplingProductName}>{entry.productName}</span>
+          <input aria-label={`${entry.productName} shelf stock`} type="number" min="0" step="1" inputMode="numeric" value={entry.shelfStock} onChange={(e) => setStockEntries((current) => current.map((item) => item.sku === entry.sku ? { ...item, shelfStock: e.target.value } : item))} placeholder="0" style={styles.samplingQuantity} />
+          <span style={styles.samplingStockLabel}>bottles</span>
+        </div>)}
+      </div>
+      {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.formActions}>
+        <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>
+        <button onClick={onStartSampling} disabled={!visit.outletId || saving} style={styles.darkButton}>{saving ? 'Starting…' : 'Start Sampling →'}</button>
+      </div>
+    </>}
+
+    {visitMode === 'SAMPLING_ONLY' && visitStep === 2 && <>
+      <div style={styles.activeVisitCard}>
+        <div style={styles.activeVisitBadge}>● SAMPLING ACTIVE</div>
+        <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
+        <div style={styles.visitTimer}><span style={styles.visitTimerLabel}>TIME IN STORE</span><strong style={styles.visitTimerValue}>{formatDuration(activeVisitElapsedSeconds)}</strong><span style={styles.visitTimerMeta}>Sampling session in progress</span></div>
+        <p style={styles.activeVisitText}>Keep the sampling session open while the team is in the store. When the session ends, continue to record the bottles sold.</p>
+        <div style={styles.formActions}><button onClick={() => setVisitStep(3)} disabled={saving} style={styles.darkButton}>Sampling Finished →</button></div>
+      </div>
+    </>}
+
+    {visitMode === 'SAMPLING_ONLY' && visitStep === 3 && <>
+      <div style={styles.samplingStockBlock}>
+        <div><strong style={styles.checklistProgress}>Record bottles sold</strong><span style={styles.checklistProgressText}>Enter the bottles sold during the sampling activity. Remaining stock is opening stock minus sold stock.</span></div>
+        {stockEntries.map((entry) => {
+          const openingQty = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
+          const soldQty = samplingClosingSales[entry.sku] === '' ? 0 : Number(samplingClosingSales[entry.sku]);
+          const remaining = Math.max(0, openingQty - soldQty);
+          return <div key={entry.sku} style={styles.samplingClosingRow}>
+            <div style={{ minWidth: 0, flex: 1 }}><strong style={styles.samplingProductName}>{entry.productName}</strong><span style={styles.samplingStockLabel}>Opening {openingQty} · Remaining {remaining}</span></div>
+            <input aria-label={`${entry.productName} bottles sold`} type="number" min="0" step="1" inputMode="numeric" value={samplingClosingSales[entry.sku] || ''} onChange={(e) => setSamplingClosingSales((current) => ({ ...current, [entry.sku]: e.target.value }))} placeholder="0" style={styles.samplingQuantity} />
+          </div>;
+        })}
+      </div>
+      <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say?" rows={3} style={styles.reasonTextarea} /></label>
+      {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.formActions}>
+        <button onClick={() => setVisitStep(2)} style={styles.secondaryButton}>← Back</button>
+        <button onClick={onCompleteSampling} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Complete Sampling Visit'}</button>
+      </div>
+    </>}
+
+    {visitMode === 'STANDARD' && visitStep === 1 && <>
       <div style={styles.formGrid}>
         <label style={styles.field}>
           <span style={styles.fieldLabel}>Store</span>
@@ -574,7 +769,7 @@ function VisitEntry({
       </div>
     </>}
 
-    {visitStep === 2 && <>
+    {visitMode === 'STANDARD' && visitStep === 2 && <>
       <div style={styles.checklistGrid}>
         <div style={styles.checklistIntro}>
           <div>
@@ -620,7 +815,7 @@ function VisitEntry({
       </div>
     </>}
 
-    {visitStep === 3 && <>
+    {visitMode === 'STANDARD' && visitStep === 3 && <>
       <div style={styles.stockIntro}>
         <div>
           <strong style={styles.checklistProgress}>4 SKUs to count</strong>
@@ -663,7 +858,7 @@ function VisitEntry({
       </div>
     </>}
     
-    {visitStep === 4 && <>
+    {visitMode === 'STANDARD' && visitStep === 4 && <>
       <div style={styles.stockIntro}>
         <div>
           <strong style={styles.checklistProgress}>Expiry check by SKU</strong>
@@ -707,7 +902,7 @@ function VisitEntry({
       </div>
     </>}
     
-    {visitStep === 5 && <>
+    {visitMode === 'STANDARD' && visitStep === 5 && <>
       <div style={styles.stockIntro}>
         <div>
           <strong style={styles.checklistProgress}>Sampling & activation</strong>
@@ -754,7 +949,7 @@ function VisitEntry({
       </div>
     </>}
     
-    {visitStep === 6 && <>
+    {visitMode === 'STANDARD' && visitStep === 6 && <>
       <div style={styles.activeVisitCard}>
         <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
         <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
@@ -777,5 +972,5 @@ function Brand() { return <div style={styles.brand}><div style={styles.brandEyeb
 function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) { return <button onClick={onClick} style={{ ...styles.navButton, ...(active ? styles.navButtonActive : {}) }}><span style={styles.navIcon}>{item.icon}</span><span>{item.label}</span></button>; }
 function UserCard({ user }: { user: User }) { return <div style={styles.userCard}><div style={styles.avatar}>{(user.displayName || user.email || 'U').charAt(0).toUpperCase()}</div><div style={{ minWidth: 0 }}><div style={styles.userName}>{user.displayName || 'Signed-in user'}</div><div style={styles.userEmail}>{user.email}</div></div></div>; }
 const styles: Record<string, React.CSSProperties> = {
-  app: { minHeight: '100vh', background: '#f7f7f5', color: '#171717', display: 'flex' }, sidebar: { width: 240, background: '#fff', borderRight: '1px solid #e7e5e0', padding: 22, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', position: 'fixed', inset: '0 auto 0 0', zIndex: 10 }, brand: { padding: '6px 10px 28px' }, brandEyebrow: { fontSize: 10, fontWeight: 800, letterSpacing: 2, marginBottom: 4 }, brandName: { fontSize: 23, fontWeight: 800, letterSpacing: -0.8 }, sideNav: { display: 'grid', gap: 5 }, navButton: { appearance: 'none', border: 0, background: 'transparent', borderRadius: 10, padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#5f5d58', cursor: 'pointer' }, navButtonActive: { background: '#171717', color: '#fff' }, navIcon: { width: 20, textAlign: 'center', fontSize: 16 }, sidebarBottom: { marginTop: 'auto' }, userCard: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: '1px solid #eee' }, avatar: { width: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }, userName: { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, userEmail: { fontSize: 10, color: '#777', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }, signOutButton: { width: '100%', border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '9px 12px', fontWeight: 600, cursor: 'pointer' }, main: { marginLeft: 240, width: 'calc(100% - 240px)', minHeight: '100vh', padding: '36px 42px 48px', boxSizing: 'border-box' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }, mobileBrand: { display: 'none' }, pageTitle: { fontSize: 30, margin: 0, letterSpacing: -1 }, pageSubtitle: { color: '#777', margin: '6px 0 0', fontSize: 14 }, headerUser: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: '#555' }, headerSignOut: { border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '8px 11px', cursor: 'pointer' }, welcomeCard: { background: '#171717', color: '#fff', borderRadius: 18, padding: '28px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, marginBottom: 18 }, welcomeTitle: { fontSize: 25, margin: '6px 0', letterSpacing: -0.7 }, welcomeText: { margin: 0, color: '#d2d2d2', fontSize: 14 }, primaryButton: { border: 0, borderRadius: 10, background: '#fff', color: '#171717', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, darkButton: { border: 0, borderRadius: 10, background: '#171717', color: '#fff', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, secondaryButton: { border: '1px solid #ddd', borderRadius: 10, background: '#fff', color: '#333', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }, smallButton: { border: '1px solid #ddd', borderRadius: 9, background: '#fff', color: '#333', padding: '8px 10px', fontWeight: 700, cursor: 'pointer', marginTop: 8, alignSelf: 'flex-start' }, kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 18 }, kpiCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 19 }, kpiLabel: { color: '#777', fontSize: 12, fontWeight: 700 }, kpiValue: { fontSize: 30, fontWeight: 800, margin: '9px 0 4px', letterSpacing: -1 }, kpiDetail: { color: '#999', fontSize: 11 }, sectionCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 22 }, sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }, sectionTitle: { margin: 0, fontSize: 19 }, sectionSubtitle: { margin: '5px 0 0', color: '#888', fontSize: 12 }, statusPill: { borderRadius: 20, padding: '5px 9px', background: '#f0f0ed', fontSize: 10, fontWeight: 800 }, emptyState: { minHeight: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#777', textAlign: 'center' }, emptyIcon: { width: 38, height: 38, borderRadius: 12, background: '#f1f1ee', display: 'grid', placeItems: 'center', color: '#555', fontWeight: 800 }, loginPage: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f7f7f5', boxSizing: 'border-box' }, loginCard: { width: '100%', maxWidth: 420, background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 12px 40px rgba(0,0,0,.08)', boxSizing: 'border-box' }, eyebrow: { fontSize: 11, fontWeight: 800, letterSpacing: 1.7 }, loginTitle: { fontSize: 32, margin: '8px 0 10px', letterSpacing: -1 }, loginText: { color: '#666', lineHeight: 1.5, marginBottom: 28 }, googleButton: { width: '100%', border: 0, borderRadius: 12, padding: '14px 16px', background: '#171717', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }, error: { marginTop: 16, padding: 12, borderRadius: 10, background: '#fff3f3', color: '#a40000', fontSize: 13, lineHeight: 1.45 }, bottomNav: { display: 'none' }, bottomNavButton: { border: 0, background: 'transparent', color: '#777', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 9, padding: '7px 2px', fontWeight: 600 }, bottomNavButtonActive: { color: '#171717', fontWeight: 800 }, bottomIcon: { fontSize: 17, lineHeight: 1 }, checklistIntro: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, checklistProgress: { display: 'block', fontSize: 12, fontWeight: 800 }, checklistProgressText: { display: 'block', marginTop: 2, color: '#888', fontSize: 11 }, checklistCount: { minWidth: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }, checklistGrid: { display: 'grid', gap: 10 }, checklistItem: { display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr)', gap: 12, padding: 15, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fff', boxSizing: 'border-box' }, checklistItemAnswered: { borderColor: '#d5d3cd' }, checklistNumber: { width: 32, height: 32, borderRadius: 10, background: '#f0f0ed', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: '#666' }, checklistContent: { minWidth: 0 }, checklistLabel: { display: 'block', fontSize: 14, lineHeight: 1.3 }, checklistHelp: { margin: '5px 0 12px', color: '#888', fontSize: 11, lineHeight: 1.45 }, answerGroup: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 210 }, answerButton: { minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, background: '#fafaf8', color: '#555', padding: '9px 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }, answerButtonYesActive: { background: '#171717', color: '#fff', borderColor: '#171717' }, answerButtonNoActive: { background: '#ecebe7', color: '#171717', borderColor: '#cfcfc8' }, answerIcon: { fontSize: 14, marginRight: 4 }, visitTimer: { margin: '16px 0', padding: '15px 16px', borderRadius: 12, background: '#171717', color: '#fff', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }, visitTimerLabel: { fontSize: 9, fontWeight: 800, letterSpacing: 1, color: '#aaa' }, visitTimerValue: { fontSize: 28, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }, visitTimerMeta: { fontSize: 10, color: '#aaa' }, activeVisitCard: { border: '1px solid #e7e5e0', borderRadius: 14, padding: 18, background: '#fafaf8' }, activeVisitBadge: { display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: '6px 9px', borderRadius: 20, background: '#171717', color: '#fff' }, activeVisitTitle: { margin: '14px 0 5px', fontSize: 19 }, activeVisitText: { margin: 0, color: '#777', fontSize: 12, lineHeight: 1.5 }, stopButton: { border: '1px solid #171717', borderRadius: 10, background: '#fff', color: '#171717', padding: '11px 16px', fontWeight: 800, cursor: 'pointer' }, reasonField: { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }, reasonLabel: { fontSize: 10, fontWeight: 800, color: '#777', textTransform: 'uppercase', letterSpacing: .6 }, reasonTextarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 9, padding: '9px 10px', fontSize: 12, resize: 'vertical', background: '#fff' }, stockIntro: { marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, stockGrid: { display: 'grid', gap: 10 }, stockCard: { border: '1px solid #e7e5e0', borderRadius: 13, padding: 15, background: '#fff' }, stockHeader: { display: 'flex', alignItems: 'center', gap: 10 }, stockSku: { display: 'block', marginTop: 3, color: '#999', fontSize: 10, fontWeight: 700 }, stockInputs: { display: 'grid', gridTemplateColumns: '1fr 1fr 70px', gap: 8, alignItems: 'end', marginTop: 13 }, stockField: { display: 'flex', flexDirection: 'column', gap: 5 }, stockInput: { width: '100%', boxSizing: 'border-box', minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, padding: '9px 10px', fontSize: 14, background: '#fafaf8' }, stockTotal: { minHeight: 42, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: 10, background: '#f0f0ed', color: '#777', fontSize: 9, textTransform: 'uppercase', letterSpacing: .5 }, 'stockTotal strong': { display: 'block', color: '#171717', fontSize: 16 }, oosBadge: { fontSize: 9, fontWeight: 800, padding: '5px 7px', borderRadius: 20, background: '#171717', color: '#fff', whiteSpace: 'nowrap' }, expiryConcern: { fontSize: 9, fontWeight: 800, padding: '5px 7px', borderRadius: 20, background: '#171717', color: '#fff', whiteSpace: 'nowrap' }, samplingCard: { border: '1px solid #e7e5e0', borderRadius: 13, padding: 15, background: '#fff' }, samplingQuestion: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14 }, samplingMetrics: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }, samplingProducts: { marginTop: 14, paddingTop: 14, borderTop: '1px solid #eceae5' }, samplingProductRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid #f0efeb' }, samplingProductName: { fontSize: 13, fontWeight: 600, lineHeight: 1.3, flex: 1 }, samplingQuantity: { width: 72, minHeight: 40, boxSizing: 'border-box', border: '1px solid #d9d7d1', borderRadius: 10, padding: '8px 9px', fontSize: 14, textAlign: 'center', background: '#fafaf8' }, formGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }, field: { display: 'flex', flexDirection: 'column', gap: 7 }, fieldLabel: { fontSize: 11, color: '#777', fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7 }, input: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14 }, textarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14, resize: 'vertical' }, infoBox: { border: '1px solid #e7e5e0', borderRadius: 11, padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 78, boxSizing: 'border-box' }, muted: { color: '#999', fontSize: 11 }, formActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }, message: { marginTop: 16, padding: 12, borderRadius: 10, background: '#f4f4f1', color: '#333', fontSize: 13 }, visitList: { display: 'grid', gap: 8 }, visitRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 14px', border: '1px solid #e7e5e0', borderRadius: 11 }, visitStore: { fontSize: 14 }, visitMeta: { marginTop: 4, color: '#888', fontSize: 11 }
+  app: { minHeight: '100vh', background: '#f7f7f5', color: '#171717', display: 'flex' }, sidebar: { width: 240, background: '#fff', borderRight: '1px solid #e7e5e0', padding: 22, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', position: 'fixed', inset: '0 auto 0 0', zIndex: 10 }, brand: { padding: '6px 10px 28px' }, brandEyebrow: { fontSize: 10, fontWeight: 800, letterSpacing: 2, marginBottom: 4 }, brandName: { fontSize: 23, fontWeight: 800, letterSpacing: -0.8 }, sideNav: { display: 'grid', gap: 5 }, navButton: { appearance: 'none', border: 0, background: 'transparent', borderRadius: 10, padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#5f5d58', cursor: 'pointer' }, navButtonActive: { background: '#171717', color: '#fff' }, navIcon: { width: 20, textAlign: 'center', fontSize: 16 }, sidebarBottom: { marginTop: 'auto' }, userCard: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: '1px solid #eee' }, avatar: { width: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }, userName: { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, userEmail: { fontSize: 10, color: '#777', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }, signOutButton: { width: '100%', border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '9px 12px', fontWeight: 600, cursor: 'pointer' }, main: { marginLeft: 240, width: 'calc(100% - 240px)', minHeight: '100vh', padding: '36px 42px 48px', boxSizing: 'border-box' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }, mobileBrand: { display: 'none' }, pageTitle: { fontSize: 30, margin: 0, letterSpacing: -1 }, pageSubtitle: { color: '#777', margin: '6px 0 0', fontSize: 14 }, headerUser: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: '#555' }, headerSignOut: { border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '8px 11px', cursor: 'pointer' }, welcomeCard: { background: '#171717', color: '#fff', borderRadius: 18, padding: '28px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, marginBottom: 18 }, welcomeTitle: { fontSize: 25, margin: '6px 0', letterSpacing: -0.7 }, welcomeText: { margin: 0, color: '#d2d2d2', fontSize: 14 }, primaryButton: { border: 0, borderRadius: 10, background: '#fff', color: '#171717', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, darkButton: { border: 0, borderRadius: 10, background: '#171717', color: '#fff', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, secondaryButton: { border: '1px solid #ddd', borderRadius: 10, background: '#fff', color: '#333', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }, smallButton: { border: '1px solid #ddd', borderRadius: 9, background: '#fff', color: '#333', padding: '8px 10px', fontWeight: 700, cursor: 'pointer', marginTop: 8, alignSelf: 'flex-start' }, kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 18 }, kpiCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 19 }, kpiLabel: { color: '#777', fontSize: 12, fontWeight: 700 }, kpiValue: { fontSize: 30, fontWeight: 800, margin: '9px 0 4px', letterSpacing: -1 }, kpiDetail: { color: '#999', fontSize: 11 }, sectionCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 22 }, sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }, sectionTitle: { margin: 0, fontSize: 19 }, sectionSubtitle: { margin: '5px 0 0', color: '#888', fontSize: 12 }, statusPill: { borderRadius: 20, padding: '5px 9px', background: '#f0f0ed', fontSize: 10, fontWeight: 800 }, emptyState: { minHeight: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#777', textAlign: 'center' }, emptyIcon: { width: 38, height: 38, borderRadius: 12, background: '#f1f1ee', display: 'grid', placeItems: 'center', color: '#555', fontWeight: 800 }, loginPage: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f7f7f5', boxSizing: 'border-box' }, loginCard: { width: '100%', maxWidth: 420, background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 12px 40px rgba(0,0,0,.08)', boxSizing: 'border-box' }, eyebrow: { fontSize: 11, fontWeight: 800, letterSpacing: 1.7 }, loginTitle: { fontSize: 32, margin: '8px 0 10px', letterSpacing: -1 }, loginText: { color: '#666', lineHeight: 1.5, marginBottom: 28 }, googleButton: { width: '100%', border: 0, borderRadius: 12, padding: '14px 16px', background: '#171717', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }, error: { marginTop: 16, padding: 12, borderRadius: 10, background: '#fff3f3', color: '#a40000', fontSize: 13, lineHeight: 1.45 }, bottomNav: { display: 'none' }, bottomNavButton: { border: 0, background: 'transparent', color: '#777', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 9, padding: '7px 2px', fontWeight: 600 }, bottomNavButtonActive: { color: '#171717', fontWeight: 800 }, bottomIcon: { fontSize: 17, lineHeight: 1 }, checklistIntro: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, checklistProgress: { display: 'block', fontSize: 12, fontWeight: 800 }, checklistProgressText: { display: 'block', marginTop: 2, color: '#888', fontSize: 11 }, checklistCount: { minWidth: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }, checklistGrid: { display: 'grid', gap: 10 }, checklistItem: { display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr)', gap: 12, padding: 15, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fff', boxSizing: 'border-box' }, checklistItemAnswered: { borderColor: '#d5d3cd' }, checklistNumber: { width: 32, height: 32, borderRadius: 10, background: '#f0f0ed', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: '#666' }, checklistContent: { minWidth: 0 }, checklistLabel: { display: 'block', fontSize: 14, lineHeight: 1.3 }, checklistHelp: { margin: '5px 0 12px', color: '#888', fontSize: 11, lineHeight: 1.45 }, answerGroup: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 210 }, answerButton: { minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, background: '#fafaf8', color: '#555', padding: '9px 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }, answerButtonYesActive: { background: '#171717', color: '#fff', borderColor: '#171717' }, answerButtonNoActive: { background: '#ecebe7', color: '#171717', borderColor: '#cfcfc8' }, answerIcon: { fontSize: 14, marginRight: 4 }, visitTimer: { margin: '16px 0', padding: '15px 16px', borderRadius: 12, background: '#171717', color: '#fff', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }, visitTimerLabel: { fontSize: 9, fontWeight: 800, letterSpacing: 1, color: '#aaa' }, visitTimerValue: { fontSize: 28, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }, visitTimerMeta: { fontSize: 10, color: '#aaa' }, activeVisitCard: { border: '1px solid #e7e5e0', borderRadius: 14, padding: 18, background: '#fafaf8' }, activeVisitBadge: { display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: '6px 9px', borderRadius: 20, background: '#171717', color: '#fff' }, activeVisitTitle: { margin: '14px 0 5px', fontSize: 19 }, activeVisitText: { margin: 0, color: '#777', fontSize: 12, lineHeight: 1.5 }, stopButton: { border: '1px solid #171717', borderRadius: 10, background: '#fff', color: '#171717', padding: '11px 16px', fontWeight: 800, cursor: 'pointer' }, reasonField: { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }, reasonLabel: { fontSize: 10, fontWeight: 800, color: '#777', textTransform: 'uppercase', letterSpacing: .6 }, reasonTextarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 9, padding: '9px 10px', fontSize: 12, resize: 'vertical', background: '#fff' }, stockIntro: { marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, stockGrid: { display: 'grid', gap: 10 }, stockCard: { border: '1px solid #e7e5e0', borderRadius: 13, padding: 15, background: '#fff' }, stockHeader: { display: 'flex', alignItems: 'center', gap: 10 }, stockSku: { display: 'block', marginTop: 3, color: '#999', fontSize: 10, fontWeight: 700 }, stockInputs: { display: 'grid', gridTemplateColumns: '1fr 1fr 70px', gap: 8, alignItems: 'end', marginTop: 13 }, stockField: { display: 'flex', flexDirection: 'column', gap: 5 }, stockInput: { width: '100%', boxSizing: 'border-box', minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, padding: '9px 10px', fontSize: 14, background: '#fafaf8' }, stockTotal: { minHeight: 42, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: 10, background: '#f0f0ed', color: '#777', fontSize: 9, textTransform: 'uppercase', letterSpacing: .5 }, 'stockTotal strong': { display: 'block', color: '#171717', fontSize: 16 }, oosBadge: { fontSize: 9, fontWeight: 800, padding: '5px 7px', borderRadius: 20, background: '#171717', color: '#fff', whiteSpace: 'nowrap' }, expiryConcern: { fontSize: 9, fontWeight: 800, padding: '5px 7px', borderRadius: 20, background: '#171717', color: '#fff', whiteSpace: 'nowrap' }, samplingCard: { border: '1px solid #e7e5e0', borderRadius: 13, padding: 15, background: '#fff' }, samplingQuestion: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14 }, samplingMetrics: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }, samplingStockBlock: { marginTop: 14, padding: 15, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fff' }, samplingOpeningRow: { display: 'grid', gridTemplateColumns: '1fr 72px 52px', alignItems: 'center', gap: 8, padding: '10px 0', borderBottom: '1px solid #f0efeb' }, samplingClosingRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid #f0efeb' }, samplingStockLabel: { display: 'block', fontSize: 11, color: '#777', marginTop: 3 }, samplingProducts: { marginTop: 14, paddingTop: 14, borderTop: '1px solid #eceae5' }, samplingProductRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid #f0efeb' }, samplingProductName: { fontSize: 13, fontWeight: 600, lineHeight: 1.3, flex: 1 }, samplingQuantity: { width: 72, minHeight: 40, boxSizing: 'border-box', border: '1px solid #d9d7d1', borderRadius: 10, padding: '8px 9px', fontSize: 14, textAlign: 'center', background: '#fafaf8' }, formGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }, field: { display: 'flex', flexDirection: 'column', gap: 7 }, fieldLabel: { fontSize: 11, color: '#777', fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7 }, input: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14 }, textarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14, resize: 'vertical' }, infoBox: { border: '1px solid #e7e5e0', borderRadius: 11, padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 78, boxSizing: 'border-box' }, muted: { color: '#999', fontSize: 11 }, formActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }, message: { marginTop: 16, padding: 12, borderRadius: 10, background: '#f4f4f1', color: '#333', fontSize: 13 }, visitList: { display: 'grid', gap: 8 }, visitRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 14px', border: '1px solid #e7e5e0', borderRadius: 11 }, visitStore: { fontSize: 14 }, visitMeta: { marginTop: 4, color: '#888', fontSize: 11 }
 };
