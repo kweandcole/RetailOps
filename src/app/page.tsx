@@ -112,7 +112,7 @@ export default function HomePage() {
       ]);
       const directOrders = orderSnapshot.docs.map((d) => ({ id: d.id, source: 'ORDER', ...d.data() }));
       const visitOrders = visitSnapshot.docs
-        .map((d) => ({ id: d.id, source: 'VISIT', ...d.data() }))
+        .map((d) => ({ id: d.id, source: 'VISIT', ...d.data() } as Record<string, any>))
         .filter((v) => v.orderPlaced === true)
         .map((v) => ({
           id: v.id,
