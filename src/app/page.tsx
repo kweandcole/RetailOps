@@ -792,7 +792,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
     setLoading(true);
     try {
       const snapshot = await getDocs(collection(getFirebaseDb(), 'visits'));
-      const loaded = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Omit<(typeof visits)[number], 'id'>) }));
+      const loaded: Array<Record<string, any>> = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, any>) }));
       loaded.sort((a, b) => {
         const aTime = a.createdAt?.toDate?.()?.getTime() || 0;
         const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
