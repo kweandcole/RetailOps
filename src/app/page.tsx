@@ -51,6 +51,7 @@ export default function HomePage() {
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracyMeters: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState('Not captured');
   const [savingVisit, setSavingVisit] = useState(false);
+  const [orders, setOrders] = useState<Record<string, any>[]>([]);
   const [visitMessage, setVisitMessage] = useState('');
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
   const [activeVisitStartedAt, setActiveVisitStartedAt] = useState<Date | null>(null);
@@ -101,6 +102,16 @@ export default function HomePage() {
       return undefined;
     }
   }, []);
+
+  async function loadOrders() {
+    if (!user) return;
+    try {
+      const snapshot = await getDocs(query(collection(getFirebaseDb(), 'orders'), where('repUid', '==', user.uid)));
+      setOrders(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)));
+    } catch {
+      setOrders([]);
+    }
+  }
 
   async function handleSignIn() {
     setBusy(true); setError('');
@@ -603,8 +614,8 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Stock' && <StockLanding />}
-      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
+      {activeNav === 'Stock' && <StockLanding />}\n      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
+      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}\n      {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && <PlaceholderSection title={activeNav} />}
     </main>
@@ -1278,6 +1289,33 @@ function VisitEntry({
     </>}
   </section>;
 }
+function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; onRefresh: () => Promise<void> }) {
+  useEffect(() => { void onRefresh(); }, []);
+
+  const open = orders.filter((o) => (o.status || 'CAPTURED') !== 'FULFILLED');
+  const value = orders.reduce((sum, o) => sum + (Number(o.totalValue) || 0), 0);
+
+  return <section style={styles.sectionCard}>
+    <div style={styles.sectionHeader}>
+      <div><h2 style={styles.sectionTitle}>Orders</h2><p style={styles.sectionSubtitle}>Orders captured during store visits.</p></div>
+      <button onClick={() => void onRefresh()} style={styles.secondaryButton}>Refresh</button>
+    </div>
+    <div style={styles.kpiGrid}>
+      <div style={styles.kpiCard}><span style={styles.kpiLabel}>Orders captured</span><strong style={styles.kpiValue}>{orders.length}</strong></div>
+      <div style={styles.kpiCard}><span style={styles.kpiLabel}>Open orders</span><strong style={styles.kpiValue}>{open.length}</strong></div>
+      <div style={styles.kpiCard}><span style={styles.kpiLabel}>Recorded value</span><strong style={styles.kpiValue}>KSh {value.toLocaleString()}</strong></div>
+    </div>
+    {orders.length === 0 ? <div style={styles.emptyState}><span>No orders captured yet.</span></div> :
+      <div style={styles.visitList}>{orders.map((order) => <article key={order.id} style={styles.visitRow}>
+        <div style={{ minWidth: 0 }}>
+          <strong style={styles.visitStore}>{order.outletName || 'Store order'}</strong>
+          <div style={styles.visitMeta}>{order.orderNumber || order.id.slice(0, 8)} · {order.status || 'CAPTURED'} · {order.totalValue ? `KSh ${Number(order.totalValue).toLocaleString()}` : 'Value not recorded'}</div>
+        </div>
+        <span style={styles.statusPill}>{order.status || 'CAPTURED'}</span>
+      </article>)}</div>}
+  </section>;
+}
+
 function PlaceholderSection({ title }: { title: string }) { return <section style={styles.sectionCard}><div style={styles.emptyState}><div style={styles.emptyIcon}>+</div><strong>{title} is next</strong><span>This section is part of the RetailOps shell. We&apos;ll connect it to Firestore in the next development steps.</span></div></section>; }
 function Brand() { return <div style={styles.brand}><div style={styles.brandEyebrow}>KWE & COLE</div><div style={styles.brandName}>RetailOps</div></div>; }
 function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) { return <button onClick={onClick} style={{ ...styles.navButton, ...(active ? styles.navButtonActive : {}) }}><span style={styles.navIcon}>{item.icon}</span><span>{item.label}</span></button>; }
