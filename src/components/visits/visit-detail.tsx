@@ -51,7 +51,6 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
 
   return <div style={styles.panel}>
     <div style={styles.grid}>
-      <Info label="Visit ID" value={full.id} />
       <Info label="Status" value={full.status || 'STARTED'} />
       <Info label="Started" value={started ? started.toLocaleString() : '—'} />
       <Info label="Completed" value={stopped ? stopped.toLocaleString() : '—'} />
