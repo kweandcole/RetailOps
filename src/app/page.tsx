@@ -8,6 +8,13 @@ import StoresSection from '@/components/stores/stores-section';
 type NavItem = { label: string; icon: string };
 type Outlet = { outletId: string; outletName?: string; retailer?: string; city?: string; branch?: string };
 type VisitDraft = { outletId: string; outletName: string; notes: string };
+type VisitChecklist = {
+  displayPresent: boolean | null;
+  productsWellDisplayed: boolean | null;
+  priceVisible: boolean | null;
+  staffEngaged: boolean | null;
+  competitorActivity: boolean | null;
+};
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: '⌂' }, { label: 'Visits', icon: '✓' }, { label: 'Stores', icon: '▣' },
   { label: 'Sampling', icon: '◎' }, { label: 'Stock', icon: '▤' }, { label: 'Orders', icon: '▱' },
@@ -27,6 +34,14 @@ export default function HomePage() {
   const [visitOpen, setVisitOpen] = useState(false);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [visit, setVisit] = useState<VisitDraft>({ outletId: '', outletName: '', notes: '' });
+  const [visitStep, setVisitStep] = useState(1);
+  const [checklist, setChecklist] = useState<VisitChecklist>({
+    displayPresent: null,
+    productsWellDisplayed: null,
+    priceVisible: null,
+    staffEngaged: null,
+    competitorActivity: null,
+  });
   const [gps, setGps] = useState<{ lat: number; lng: number; accuracyMeters: number } | null>(null);
   const [gpsStatus, setGpsStatus] = useState('Not captured');
   const [savingVisit, setSavingVisit] = useState(false);
@@ -57,7 +72,8 @@ export default function HomePage() {
   }
 
   async function openNewVisit() {
-    setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured');
+    setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured'); setVisitStep(1);
+    setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
@@ -93,12 +109,15 @@ export default function HomePage() {
         repName: user?.displayName || user?.email || 'Field rep',
         status: 'STARTED',
         notes: visit.notes,
+        checklist,
         gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
         startedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       });
       setVisitMessage('Visit saved successfully.');
       setVisit({ outletId: '', outletName: '', notes: '' });
+      setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
+      setVisitStep(1);
       setGps(null); setGpsStatus('Not captured');
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to save visit.');
@@ -134,7 +153,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} gpsStatus={gpsStatus} onCaptureGps={captureGps} onSave={saveVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -189,17 +208,142 @@ function VisitsLanding({ onNewVisit }: { onNewVisit: () => void }) {
       })}</div>}
   </section>;
 }
-function VisitEntry({ outlets, visit, setVisit, gpsStatus, onCaptureGps, onSave, saving, message, onClose }: { outlets: Outlet[]; visit: VisitDraft; setVisit: React.Dispatch<React.SetStateAction<VisitDraft>>; gpsStatus: string; onCaptureGps: () => void; onSave: () => void; saving: boolean; message: string; onClose: () => void }) {
+function VisitEntry({
+  outlets,
+  visit,
+  setVisit,
+  visitStep,
+  setVisitStep,
+  checklist,
+  setChecklist,
+  gpsStatus,
+  onCaptureGps,
+  onSave,
+  saving,
+  message,
+  onClose,
+}: {
+  outlets: Outlet[];
+  visit: VisitDraft;
+  setVisit: React.Dispatch<React.SetStateAction<VisitDraft>>;
+  visitStep: number;
+  setVisitStep: React.Dispatch<React.SetStateAction<number>>;
+  checklist: VisitChecklist;
+  setChecklist: React.Dispatch<React.SetStateAction<VisitChecklist>>;
+  gpsStatus: string;
+  onCaptureGps: () => void;
+  onSave: () => void;
+  saving: boolean;
+  message: string;
+  onClose: () => void;
+}) {
+  const checklistItems: Array<{ key: keyof VisitChecklist; label: string; help: string }> = [
+    { key: 'displayPresent', label: 'Kwe & Cole display is present', help: 'Product is visible in the expected display or shelf location.' },
+    { key: 'productsWellDisplayed', label: 'Products are well displayed', help: 'Bottles are upright, clean and easy for shoppers to see.' },
+    { key: 'priceVisible', label: 'Price is visible', help: 'The shelf or display has a visible selling price.' },
+    { key: 'staffEngaged', label: 'Store staff were engaged', help: 'A store team member was available for the visit.' },
+    { key: 'competitorActivity', label: 'Competitor activity observed', help: 'Record Yes if a relevant competitor promotion or display was observed.' },
+  ];
+
+  const setAnswer = (key: keyof VisitChecklist, value: boolean) => {
+    setChecklist((current) => ({ ...current, [key]: value }));
+  };
+
+  function continueToChecklist() {
+    if (!visit.outletId) {
+      return;
+    }
+    setVisitStep(2);
+    setVisitMessage('');
+  }
+
+  function saveChecklistVisit() {
+    if (checklistItems.some((item) => checklist[item.key] === null)) {
+      setVisitMessage('Please answer all checklist questions before saving.');
+      return;
+    }
+    setVisitMessage('');
+    onSave();
+  }
+
   return <section style={styles.sectionCard}>
-    <div style={styles.sectionHeader}><div><div style={styles.eyebrow}>VISIT ENTRY</div><h2 style={styles.sectionTitle}>Start a store visit</h2><p style={styles.sectionSubtitle}>Record the visit first; stock, sampling and feedback can be added next.</p></div><button onClick={onClose} style={styles.secondaryButton}>Back</button></div>
-    <div style={styles.formGrid}>
-      <label style={styles.field}><span style={styles.fieldLabel}>Store</span><select value={visit.outletId} onChange={(e) => { const selected = outlets.find((o) => o.outletId === e.target.value); setVisit({ ...visit, outletId: e.target.value, outletName: selected?.retailer ? `${selected.retailer} - ${selected.branch || selected.outletName || e.target.value}` : (selected?.branch || selected?.outletName || e.target.value) }); }} style={styles.input}><option value="">Select a store</option>{outlets.map((outlet) => <option key={outlet.outletId} value={outlet.outletId}>{outlet.retailer ? `${outlet.retailer} - ${outlet.branch || outlet.outletName || outlet.outletId}` : (outlet.branch || outlet.outletName || outlet.outletId)}</option>)}</select></label>
-      <div style={styles.infoBox}><span style={styles.fieldLabel}>Field rep</span><strong>Signed-in user</strong><span style={styles.muted}>{visit.outletName ? 'Ready to start visit' : 'Select a store first'}</span></div>
-      <div style={styles.infoBox}><span style={styles.fieldLabel}>GPS location</span><strong>{gpsStatus}</strong><button type="button" onClick={onCaptureGps} style={styles.smallButton}>Capture GPS</button></div>
-      <label style={{ ...styles.field, gridColumn: '1 / -1' }}><span style={styles.fieldLabel}>Notes</span><textarea value={visit.notes} onChange={(e) => setVisit({ ...visit, notes: e.target.value })} placeholder="Optional visit notes" rows={4} style={styles.textarea} /></label>
+    <div style={styles.sectionHeader}>
+      <div>
+        <div style={styles.eyebrow}>VISIT ENTRY · STEP {visitStep} OF 2</div>
+        <h2 style={styles.sectionTitle}>{visitStep === 1 ? 'Start a store visit' : 'Visit checklist'}</h2>
+        <p style={styles.sectionSubtitle}>{visitStep === 1 ? 'Confirm the store and capture the visit location.' : 'Record what you observed during the store visit.'}</p>
+      </div>
+      <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>
     </div>
-    {message && <div style={styles.message}>{message}</div>}
-    <div style={styles.formActions}><button onClick={onClose} style={styles.secondaryButton}>Cancel</button><button onClick={onSave} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Start & Save Visit'}</button></div>
+
+    {visitStep === 1 ? <>
+      <div style={styles.formGrid}>
+        <label style={styles.field}>
+          <span style={styles.fieldLabel}>Store</span>
+          <select
+            value={visit.outletId}
+            onChange={(e) => {
+              const selected = outlets.find((o) => o.outletId === e.target.value);
+              setVisit({
+                ...visit,
+                outletId: e.target.value,
+                outletName: selected?.retailer
+                  ? `${selected.retailer} - ${selected.branch || selected.outletName || e.target.value}`
+                  : (selected?.branch || selected?.outletName || e.target.value),
+              });
+            }}
+            style={styles.input}
+          >
+            <option value="">Select a store</option>
+            {outlets.map((outlet) => <option key={outlet.outletId} value={outlet.outletId}>{outlet.retailer ? `${outlet.retailer} - ${outlet.branch || outlet.outletName || outlet.outletId}` : (outlet.branch || outlet.outletName || outlet.outletId)}</option>)}
+          </select>
+        </label>
+
+        <div style={styles.infoBox}>
+          <span style={styles.fieldLabel}>Field rep</span>
+          <strong>Signed-in user</strong>
+          <span style={styles.muted}>{visit.outletName ? 'Ready to start visit' : 'Select a store first'}</span>
+        </div>
+
+        <div style={styles.infoBox}>
+          <span style={styles.fieldLabel}>GPS location</span>
+          <strong>{gpsStatus}</strong>
+          <button type="button" onClick={onCaptureGps} style={styles.smallButton}>Capture GPS</button>
+        </div>
+
+        <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+          <span style={styles.fieldLabel}>Notes</span>
+          <textarea value={visit.notes} onChange={(e) => setVisit({ ...visit, notes: e.target.value })} placeholder="Optional visit notes" rows={4} style={styles.textarea} />
+        </label>
+      </div>
+
+      {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.formActions}>
+        <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>
+        <button onClick={continueToChecklist} disabled={!visit.outletId} style={styles.darkButton}>Continue to Checklist →</button>
+      </div>
+    </> : <>
+      <div style={styles.checklistGrid}>
+        {checklistItems.map((item) => (
+          <article key={item.key} style={styles.checklistItem}>
+            <div>
+              <strong style={styles.checklistLabel}>{item.label}</strong>
+              <p style={styles.checklistHelp}>{item.help}</p>
+            </div>
+            <div style={styles.answerGroup}>
+              <button type="button" onClick={() => setAnswer(item.key, true)} style={{ ...styles.answerButton, ...(checklist[item.key] === true ? styles.answerButtonActive : {}) }}>Yes</button>
+              <button type="button" onClick={() => setAnswer(item.key, false)} style={{ ...styles.answerButton, ...(checklist[item.key] === false ? styles.answerButtonActive : {}) }}>No</button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.formActions}>
+        <button onClick={() => { setVisitStep(1); setVisitMessage(''); }} style={styles.secondaryButton}>← Back</button>
+        <button onClick={saveChecklistVisit} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Save Visit'}</button>
+      </div>
+    </>}
   </section>;
 }
 function PlaceholderSection({ title }: { title: string }) { return <section style={styles.sectionCard}><div style={styles.emptyState}><div style={styles.emptyIcon}>+</div><strong>{title} is next</strong><span>This section is part of the RetailOps shell. We&apos;ll connect it to Firestore in the next development steps.</span></div></section>; }
