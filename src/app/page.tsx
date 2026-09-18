@@ -784,6 +784,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
 function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => void; onNewSamplingVisit: () => void }) {
   const [visits, setVisits] = useState<Array<{ id: string; outletName: string; repName: string; status: string; createdAt?: { toDate?: () => Date } }>>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVisit, setSelectedVisit] = useState<any | null>(null);
 
   async function loadVisits() {
     setLoading(true);
