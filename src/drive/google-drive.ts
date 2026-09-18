@@ -1,7 +1,7 @@
 import { google, drive_v3 } from 'googleapis';
 import { getEnv } from '@/config/env';
 
-export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 
 export function getDriveOAuthClient() {
   const env = getEnv();
