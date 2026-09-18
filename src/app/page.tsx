@@ -1340,7 +1340,7 @@ function VisitEntry({
           <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>This is independent of sampling. Record any order placed by the store during the visit.</span></div>
           <div style={styles.answerGroup}>
             <button type="button" aria-pressed={samplingOrderPlaced === true} onClick={() => setSamplingOrderPlaced(true)} style={{ ...styles.answerButton, ...(samplingOrderPlaced === true ? styles.answerButtonYesActive : {}) }}>✓ Yes</button>
-            <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); resetOrderItems(); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
+            <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); setOrderItems((current) => current.map((item) => ({ ...item, quantity: '' }))); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
           </div>
         </div>
         {samplingOrderPlaced === true && <>
