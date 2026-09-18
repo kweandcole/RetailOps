@@ -756,7 +756,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
             return <article key={session.id} style={styles.visitRow}>
               <div style={{ minWidth: 0 }}>
                 <strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong>
-                <div style={styles.visitMeta}>{started ? `Started ${started.toLocaleString()}` : 'Start time pending'} · Session ID {session.id.slice(0, 8)}</div>
+                <div style={styles.visitMeta}>{started ? `Started ${started.toLocaleString()}` : 'Start time pending'}</div>
               </div>
               <button onClick={() => onResume(session)} style={styles.darkButton}>Close session</button>
             </article>;
