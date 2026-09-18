@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase/client';
+import StoreActivity from './store-activity';
 
 type StoreStatus = 'Visited' | 'Pending';
 type Store = {
@@ -25,6 +26,7 @@ export default function StoresSection() {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
 
   async function loadStores() {
     setLoading(true); setError('');
@@ -91,7 +93,8 @@ export default function StoresSection() {
       <div style={styles.list}>
         {!loading && filteredStores.map((store) => <article key={store.outletId} style={styles.card}>
           <div style={styles.cardTop}><div><div style={styles.retailer}>{store.retailer}</div><h2 style={styles.branch}>{store.branchName}</h2><div style={styles.location}>{store.location}</div></div><span style={{ ...styles.status, ...(store.status === 'Visited' ? styles.statusVisited : styles.statusPending) }}>{store.status}</span></div>
-          <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><button style={styles.visitButton}>Start visit</button></div>
+          <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><div style={styles.cardActions}><button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button><button style={styles.visitButton}>Start visit</button></div></div>
+          {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} />}
         </article>)}
         {!loading && filteredStores.length === 0 && <div style={styles.empty}>{stores.length === 0 ? 'No stores have been imported yet. Use “Import from Sheets” to bring in the existing Outlet Master.' : 'No stores match your search.'}</div>}
       </div>
