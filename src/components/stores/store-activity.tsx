@@ -11,6 +11,7 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
   const [visits, setVisits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [stock, setStock] = useState<any[]>([]);
+  const [expiry, setExpiry] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,15 +21,17 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
       getDocs(query(collection(getFirebaseDb(), 'visits'), where('outletId', '==', outletId))),
       getDocs(query(collection(getFirebaseDb(), 'orders'), where('outletId', '==', outletId))),
       getDocs(query(collection(getFirebaseDb(), 'stock'), where('outletId', '==', outletId))),
-    ]).then(([visitSnap, orderSnap, stockSnap]) => {
+      getDocs(query(collection(getFirebaseDb(), 'expiry'), where('outletId', '==', outletId))),
+    ]).then(([visitSnap, orderSnap, stockSnap, expirySnap]) => {
       if (!mounted) return;
       const loadedVisits: Array<Record<string, any>> = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
       loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
       setVisits(loadedVisits);
       setOrders(orderSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
       setStock(stockSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
+      setExpiry(expirySnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
     }).catch(() => {
-      if (mounted) { setVisits([]); setOrders([]); setStock([]); }
+      if (mounted) { setVisits([]); setOrders([]); setStock([]); setExpiry([]); }
     }).finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, [outletId]);
@@ -61,11 +64,17 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
         {stock.length === 0 ? <p style={styles.muted}>No stock records yet.</p> : <div style={styles.list}>{stock.map((item) => <div key={item.id} style={styles.row}><span>{item.productName || item.sku}</span><strong>{Number(item.shelfStock || 0) + Number(item.backStock || 0)} bottles</strong></div>)}</div>}
       </div>
       <div style={styles.section}>
+        <span style={styles.eyebrow}>Expiry issues</span>
+        {expiry.length === 0 ? <p style={styles.muted}>No expiry records yet.</p> : <div style={styles.list}>{expiry.map((item) => <div key={item.id} style={styles.row}><span>{item.productName || item.sku}</span><strong>{item.hasExpiryConcern ? String(item.quantity || 0) + ' · ' + (item.expiryDate || 'date not recorded') : 'No concern'}</strong></div>)}</div>}
+      </div>
+      <div style={styles.section}>
         <span style={styles.eyebrow}>Visit history</span>
         {visits.length === 0 ? <p style={styles.muted}>No visits recorded yet.</p> : <div style={styles.list}>{visits.slice(0, 10).map((visit) => <div key={visit.id} style={styles.visitCard}>
           <div style={styles.visitHead}><strong>{formatDate(visit.createdAt || visit.startedAt)}</strong><span style={visit.visitType === 'SAMPLING_ONLY' ? styles.sampling : styles.normal}>{visit.visitType === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL'}</span></div>
           <span style={styles.muted}>{visit.repName || 'Field rep'} · {visit.status || '—'}{visit.durationMinutes != null ? ` · ${visit.durationMinutes} min` : ''}</span>
           {visit.notes && <p style={styles.text}>{visit.notes}</p>}
+          {visit.sampling?.conducted && <div style={styles.detailBox}><strong>Sampling</strong><span>{Number(visit.sampling.customersSampled || 0)} sampled · {Number(visit.sampling.bottlesSold || 0)} sold</span>{visit.sampling.feedback && <span>{visit.sampling.feedback}</span>}</div>}
+          {visit.sampling?.conducted && visit.sampling.bottlesSoldBySku && <div style={styles.detailBox}><strong>Sampling SKU sales</strong>{Object.entries(visit.sampling.bottlesSoldBySku).map(([sku, qty]) => <span key={sku}>{sku}: {Number(qty || 0)} bottles</span>)}</div>}
           <VisitEvidenceSummary visitId={visit.id} />
         </div>)}</div>}
       </div>
@@ -91,6 +100,7 @@ const styles: Record<string, React.CSSProperties> = {
   list: { display: 'grid', gap: 6, marginTop: 6 },
   row: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 8px', background: '#fff', borderRadius: 7, fontSize: 10 },
   visitCard: { padding: 9, background: '#fff', borderRadius: 8 },
+  detailBox: { marginTop: 7, padding: 7, background: '#f7f7f4', borderRadius: 7, display: 'grid', gap: 3, fontSize: 9 },
   visitHead: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 10 },
   normal: { padding: '3px 6px', borderRadius: 999, background: '#dbeafe', color: '#1d4ed8', fontSize: 7, fontWeight: 900 },
   sampling: { padding: '3px 6px', borderRadius: 999, background: '#ede9fe', color: '#6d28d9', fontSize: 7, fontWeight: 900 },
