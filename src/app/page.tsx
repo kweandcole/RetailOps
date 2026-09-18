@@ -5,6 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, server
 import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebase/client';
 import StoresSection from '@/components/stores/stores-section';
 import VisitEvidence from '@/components/visits/visit-evidence';
+import VisitEvidenceSummary from '@/components/visits/visit-evidence-summary';
 
 type NavItem = { label: string; icon: string };
 type Outlet = { outletId: string; outletName?: string; retailer?: string; city?: string; branch?: string };
@@ -822,6 +823,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
           <div style={{ minWidth: 0 }}>
             <strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong>
             <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}</div>
+            <VisitEvidenceSummary visitId={item.id} />
           </div>
           <span style={styles.statusPill}>{item.status || 'STARTED'}</span>
         </article>;
