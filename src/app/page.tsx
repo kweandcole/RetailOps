@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebase/client';
+import { getFirebaseAuth, getFirebaseDb, getGoogleProvider, getFirebaseStorage } from '@/lib/firebase/client';
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import StoresSection from '@/components/stores/stores-section';
 
 type NavItem = { label: string; icon: string };
@@ -84,6 +85,8 @@ export default function HomePage() {
   const [samplingClosingCustomers, setSamplingClosingCustomers] = useState('');
   const [samplingOrderPlaced, setSamplingOrderPlaced] = useState<boolean | null>(null);
   const [samplingOrderNotes, setSamplingOrderNotes] = useState('');
+  const [visitPhotos, setVisitPhotos] = useState<{ name: string; url: string; path: string }[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([
     { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', quantity: '', unitPrice: '550' },
     { sku: 'SKU-002', productName: 'Hot Honey', quantity: '', unitPrice: '650' },
@@ -439,6 +442,27 @@ export default function HomePage() {
     });
   }
 
+  async function uploadVisitPhoto(file: File) {
+    if (!activeVisitId || !user) throw new Error('Start the visit before adding evidence.');
+    if (!file.type.startsWith('image/')) throw new Error('Please select an image file.');
+    if (file.size > 8 * 1024 * 1024) throw new Error('Please use an image smaller than 8 MB.');
+    setUploadingPhoto(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `visits/${activeVisitId}/evidence/${Date.now()}-${safeName}`;
+      const storage = getFirebaseStorage();
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, file, { contentType: file.type });
+      const url = await getDownloadURL(fileRef);
+      const photo = { name: file.name, url, path };
+      const nextPhotos = [...visitPhotos, photo];
+      setVisitPhotos(nextPhotos);
+      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), { photos: nextPhotos, updatedAt: serverTimestamp() });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   async function saveSampling() {
     if (!activeVisitId) { setVisitMessage('Start the visit before saving sampling information.'); return; }
     if (sampling.conducted === null) { setVisitMessage('Please indicate whether sampling was conducted.'); return; }
@@ -602,6 +626,7 @@ export default function HomePage() {
       setSamplingOrderPlaced(null);
       setSamplingOrderNotes('');
       resetOrderItems();
+      setVisitPhotos([]);
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to complete sampling session.');
     } finally { setSavingVisit(false); }
@@ -1097,6 +1122,28 @@ function VisitEntry({
         })}
       </div>
             <div style={{ ...styles.samplingCard, marginTop: 14 }}>
+        <div>
+          <strong style={styles.reasonLabel}>Store / activation evidence</strong>
+          <span style={styles.checklistProgressText}>Optional: take photos of the shelf, display, sampling setup or other evidence from this visit.</span>
+        </div>
+        <label style={{ ...styles.smallButton, display: 'inline-flex', marginTop: 10, cursor: uploadingPhoto ? 'wait' : 'pointer' }}>
+          {uploadingPhoto ? 'Uploading…' : '＋ Add photo'}
+          <input type="file" accept="image/*" capture="environment" disabled={uploadingPhoto || !activeVisitId} onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.currentTarget.value = '';
+            if (!file) return;
+            try { await uploadVisitPhoto(file); setVisitMessage('Photo uploaded.'); } catch (err) { setVisitMessage(err instanceof Error ? err.message : 'Photo upload failed.'); }
+          }} style={{ display: 'none' }} />
+        </label>
+        {visitPhotos.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10, marginTop: 12 }}>
+          {visitPhotos.map((photo) => <a key={photo.path} href={photo.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <img src={photo.url} alt={photo.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 10, border: '1px solid #ddd' }} />
+            <span style={{ display: 'block', fontSize: 11, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{photo.name}</span>
+          </a>)}
+        </div>
+      </div>
+
+      <div style={{ ...styles.samplingCard, marginTop: 14 }}>
         <div style={styles.samplingQuestion}>
           <div><strong style={styles.checklistLabel}>Was an order placed?</strong><span style={styles.stockSku}>Record whether the store placed an order during this sampling session.</span></div>
           <div style={styles.answerGroup}>
