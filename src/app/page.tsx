@@ -313,7 +313,13 @@ export default function HomePage() {
         { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
         { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
       ]);
-    setSampling({ conducted: null, customersSampled: '', bottlesSold: '', feedback: '', reason: '' });
+      setSampling({
+        conducted: null,
+        customersSampled: '',
+        bottlesSoldBySku: { 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' },
+        feedback: '',
+        reason: '',
+      });
     setExpiryEntries([
       { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
       { sku: 'SKU-002', productName: 'Hot Honey', hasExpiryConcern: null, quantity: '', expiryDate: '' },
