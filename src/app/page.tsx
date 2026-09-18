@@ -945,6 +945,8 @@ function VisitEntry({
   setSamplingOrderPlaced,
   samplingOrderNotes,
   setSamplingOrderNotes,
+  orderItems,
+  setOrderItems,
   activeVisitElapsedSeconds,
   activeVisitStartedAt,
   onSaveChecklist,
