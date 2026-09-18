@@ -7,6 +7,13 @@ import VisitEvidenceSummary from '@/components/visits/visit-evidence-summary';
 
 type StoreActivityProps = { outletId: string; retailer: string; branchName: string };
 
+const SKU_NAMES: Record<string, string> = {
+  'SKU-001': 'Honey Habanero Hot Sauce',
+  'SKU-002': 'Hot Honey',
+  'SKU-003': 'Jalapeno Lime Hot Sauce',
+  'SKU-004': 'Mango Pineapple Habanero Hot Sauce',
+};
+
 export default function StoreActivity({ outletId, retailer, branchName }: StoreActivityProps) {
   const [visits, setVisits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -82,8 +89,8 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
           <div style={styles.visitHead}><strong>{formatDate(visit.createdAt || visit.startedAt)}</strong><span style={visit.visitType === 'SAMPLING_ONLY' ? styles.sampling : styles.normal}>{visit.visitType === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL'}</span></div>
           <span style={styles.muted}>{visit.repName || 'Field rep'} · {visit.status || '—'}{visit.durationMinutes != null ? ` · ${visit.durationMinutes} min` : ''}</span>
           {visit.notes && <p style={styles.text}>{visit.notes}</p>}
-          {visit.sampling?.conducted && <div style={styles.detailBox}><strong>Sampling</strong><span>{Number(visit.sampling.customersSampled || 0)} sampled · {Number(visit.sampling.bottlesSold || 0)} sold</span>{visit.sampling.feedback && <span>{visit.sampling.feedback}</span>}</div>}
-          {visit.sampling?.conducted && visit.sampling.bottlesSoldBySku && <div style={styles.detailBox}><strong>Sampling SKU sales</strong>{Object.entries(visit.sampling.bottlesSoldBySku).map(([sku, qty]) => <span key={sku}>{sku}: {Number(qty || 0)} bottles</span>)}</div>}
+          {visit.sampling?.conducted && <div style={styles.detailBox}><div style={styles.detailTitle}>Sampling results</div><div style={styles.samplingMetrics}><span><strong>{Number(visit.sampling.customersSampled || 0)}</strong> customers sampled</span><span><strong>{Number(visit.sampling.bottlesSold || 0)}</strong> bottles sold</span></div>{visit.sampling.feedback && <span style={styles.feedback}>“{visit.sampling.feedback}”</span>}</div>}
+          {visit.sampling?.conducted && visit.sampling.bottlesSoldBySku && Object.keys(visit.sampling.bottlesSoldBySku).length > 0 && <div style={styles.detailBox}><div style={styles.detailTitle}>Products sold</div>{Object.entries(visit.sampling.bottlesSoldBySku).filter(([, qty]) => Number(qty || 0) > 0).map(([sku, qty]) => <div key={sku} style={styles.skuRow}><span>{SKU_NAMES[sku] || sku}</span><strong>{Number(qty || 0)}</strong></div>)}</div>}
           <VisitEvidenceSummary visitId={visit.id} />
         </div>)}</div>}
       </div>
@@ -109,7 +116,11 @@ const styles: Record<string, React.CSSProperties> = {
   list: { display: 'grid', gap: 6, marginTop: 6 },
   row: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 8px', background: '#fff', borderRadius: 7, fontSize: 10 },
   visitCard: { padding: 9, background: '#fff', borderRadius: 8 },
-  detailBox: { marginTop: 7, padding: 7, background: '#f7f7f4', borderRadius: 7, display: 'grid', gap: 3, fontSize: 9 },
+  detailBox: { marginTop: 7, padding: 8, background: '#f7f7f4', borderRadius: 7, display: 'grid', gap: 5, fontSize: 9 },
+  detailTitle: { fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: .5 },
+  samplingMetrics: { display: 'flex', gap: 12, flexWrap: 'wrap' },
+  feedback: { color: '#666', lineHeight: 1.35 },
+  skuRow: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderTop: '1px solid #e5e3dd' },
   visitHead: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 10 },
   normal: { padding: '3px 6px', borderRadius: 999, background: '#dbeafe', color: '#1d4ed8', fontSize: 7, fontWeight: 900 },
   sampling: { padding: '3px 6px', borderRadius: 999, background: '#ede9fe', color: '#6d28d9', fontSize: 7, fontWeight: 900 },
