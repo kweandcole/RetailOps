@@ -403,7 +403,7 @@ export default function HomePage() {
 
     setActiveVisitId(session.id);
     setActiveVisitStartedAt(startedAt instanceof Date ? startedAt : new Date());
-    setActiveNav('Sampling');
+    setActiveNav('Visits');
     setVisitMode('SAMPLING_ONLY');
     setVisitOpen(true);
     setVisitStep(3);
