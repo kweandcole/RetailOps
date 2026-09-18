@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         mimeType: body.mimeType,
         body: Readable.from(buffer),
       },
-      fields: 'id,name,mimeType,webViewLink,size,createdTime',
+      fields: 'id,name,mimeType,webViewLink,thumbnailLink,size,createdTime',
     });
 
     return NextResponse.json({
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         name: created.data.name,
         mimeType: created.data.mimeType,
         webViewLink: created.data.webViewLink || null,
+        thumbnailLink: created.data.thumbnailLink || null,
         size: created.data.size ? Number(created.data.size) : buffer.length,
         createdTime: created.data.createdTime || null,
         photoType: body.photoType || 'evidence',
