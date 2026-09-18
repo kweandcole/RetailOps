@@ -22,7 +22,7 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
       getDocs(query(collection(getFirebaseDb(), 'stock'), where('outletId', '==', outletId))),
     ]).then(([visitSnap, orderSnap, stockSnap]) => {
       if (!mounted) return;
-      const loadedVisits = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+      const loadedVisits: Array<Record<string, any>> = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
       loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
       setVisits(loadedVisits);
       setOrders(orderSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) })));
