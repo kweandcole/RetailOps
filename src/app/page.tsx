@@ -206,7 +206,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onSaveChecklist={saveChecklist} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onSaveChecklist={saveChecklist} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -300,7 +300,7 @@ function VisitEntry({
   message: string;
   onClose: () => void;
 }) {
-  const checklistItems: Array<{ key: keyof VisitChecklist; label: string; help: string }> = [
+  const checklistItems: Array<{ key: ChecklistKey; label: string; help: string }> = [
     { key: 'displayPresent', label: 'Kwe & Cole display is present', help: 'Product is visible in the expected display or shelf location.' },
     { key: 'productsWellDisplayed', label: 'Products are well displayed', help: 'Bottles are upright, clean and easy for shoppers to see.' },
     { key: 'priceVisible', label: 'Price is visible', help: 'The shelf or display has a visible selling price.' },
@@ -308,38 +308,28 @@ function VisitEntry({
     { key: 'competitorActivity', label: 'Competitor activity observed', help: 'Record Yes if a relevant competitor promotion or display was observed.' },
   ];
 
-  const setAnswer = (key: keyof VisitChecklist, value: boolean) => {
+  const setAnswer = (key: ChecklistKey, value: boolean) => {
     setChecklist((current) => ({ ...current, [key]: value }));
+    if (value === true) {
+      setChecklistReasons((current) => ({ ...current, [key]: '' }));
+    }
   };
-
-  function continueToChecklist() {
-    if (!visit.outletId) {
-      return;
-    }
-    setVisitStep(2);
-    setVisitMessage('');
-  }
-
-  function saveChecklistVisit() {
-    if (checklistItems.some((item) => checklist[item.key] === null)) {
-      setVisitMessage('Please answer all checklist questions before saving.');
-      return;
-    }
-    setVisitMessage('');
-    onSave();
-  }
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
       <div>
         <div style={styles.eyebrow}>STORE VISIT · STEP {visitStep} OF 3</div>
-        <h2 style={styles.sectionTitle}>{visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : 'Visit in progress'}</h2>
-        <p style={styles.sectionSubtitle}>{visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : 'The visit remains active while you complete the remaining tasks.'}</p>
+        <h2 style={styles.sectionTitle}>
+          {visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : 'Visit in progress'}
+        </h2>
+        <p style={styles.sectionSubtitle}>
+          {visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : 'The visit remains active while you complete the remaining tasks.'}
+        </p>
       </div>
-      <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>
+      {visitStep !== 3 && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
     </div>
 
-    {visitStep === 1 ? <>
+    {visitStep === 1 && <>
       <div style={styles.formGrid}>
         <label style={styles.field}>
           <span style={styles.fieldLabel}>Store</span>
@@ -379,68 +369,69 @@ function VisitEntry({
           <textarea value={visit.notes} onChange={(e) => setVisit({ ...visit, notes: e.target.value })} placeholder="Optional visit notes" rows={4} style={styles.textarea} />
         </label>
       </div>
-
-    </> : <>
-      <div style={styles.activeVisitCard}>
-        <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
-        <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
-        <p style={styles.activeVisitText}>Start time has been recorded. Continue with stock, expiry, sampling and feedback as we add them to this visit.</p>
-        <div style={styles.formActions}>
-          <button onClick={onStop} disabled={saving} style={styles.stopButton}>{saving ? 'Stopping…' : 'Stop Visit'}</button>
-        </div>
-      </div>
       {message && <div style={styles.message}>{message}</div>}
       <div style={styles.formActions}>
         <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>
         <button onClick={onStart} disabled={!visit.outletId || saving} style={styles.darkButton}>{saving ? 'Starting…' : 'Start Visit →'}</button>
       </div>
-    </> : visitStep === 2 ? <>
+    </>}
+
+    {visitStep === 2 && <>
       <div style={styles.checklistGrid}>
         <div style={styles.checklistIntro}>
           <div>
             <strong style={styles.checklistProgress}>5 quick checks</strong>
-            <span style={styles.checklistProgressText}>Tap one answer for each observation.</span>
+            <span style={styles.checklistProgressText}>Tap one answer for each observation. A reason is required when you select No.</span>
           </div>
           <span style={styles.checklistCount}>{checklistItems.filter((item) => checklist[item.key] !== null).length}/5</span>
         </div>
-        <div style={styles.checklistGrid}>
-          {checklistItems.map((item, index) => (
-            <article key={item.key} style={{ ...styles.checklistItem, ...(checklist[item.key] !== null ? styles.checklistItemAnswered : {}) }}>
-              <div style={styles.checklistNumber}>{index + 1}</div>
-              <div style={styles.checklistContent}>
-                <strong style={styles.checklistLabel}>{item.label}</strong>
-                <p style={styles.checklistHelp}>{item.help}</p>
-                <div style={styles.answerGroup}>
-                  <button type="button" aria-pressed={checklist[item.key] === true} onClick={() => setAnswer(item.key, true)} style={{ ...styles.answerButton, ...(checklist[item.key] === true ? styles.answerButtonYesActive : {}) }}>
-                    <span style={styles.answerIcon}>✓</span> Yes
-                  </button>
-                  <button type="button" aria-pressed={checklist[item.key] === false} onClick={() => setAnswer(item.key, false)} style={{ ...styles.answerButton, ...(checklist[item.key] === false ? styles.answerButtonNoActive : {}) }}>
-                    <span style={styles.answerIcon}>×</span> No
-                  </button>
-                </div>
-                {checklist[item.key] === false && (
-                  <label style={styles.reasonField}>
-                    <span style={styles.reasonLabel}>Reason required</span>
-                    <textarea
-                      value={checklistReasons[item.key]}
-                      onChange={(e) => setChecklistReasons((current) => ({ ...current, [item.key]: e.target.value }))}
-                      placeholder="What was the issue?"
-                      rows={2}
-                      style={styles.reasonTextarea}
-                    />
-                  </label>
-                )}
+        {checklistItems.map((item, index) => (
+          <article key={item.key} style={{ ...styles.checklistItem, ...(checklist[item.key] !== null ? styles.checklistItemAnswered : {}) }}>
+            <div style={styles.checklistNumber}>{index + 1}</div>
+            <div style={styles.checklistContent}>
+              <strong style={styles.checklistLabel}>{item.label}</strong>
+              <p style={styles.checklistHelp}>{item.help}</p>
+              <div style={styles.answerGroup}>
+                <button type="button" aria-pressed={checklist[item.key] === true} onClick={() => setAnswer(item.key, true)} style={{ ...styles.answerButton, ...(checklist[item.key] === true ? styles.answerButtonYesActive : {}) }}>
+                  <span style={styles.answerIcon}>✓</span> Yes
+                </button>
+                <button type="button" aria-pressed={checklist[item.key] === false} onClick={() => setAnswer(item.key, false)} style={{ ...styles.answerButton, ...(checklist[item.key] === false ? styles.answerButtonNoActive : {}) }}>
+                  <span style={styles.answerIcon}>×</span> No
+                </button>
               </div>
-            </article>
-          ))}
-        </div>
+              {checklist[item.key] === false && (
+                <label style={styles.reasonField}>
+                  <span style={styles.reasonLabel}>Why was this marked No?</span>
+                  <textarea
+                    value={checklistReasons[item.key]}
+                    onChange={(e) => setChecklistReasons((current) => ({ ...current, [item.key]: e.target.value }))}
+                    placeholder="Enter the reason or issue observed"
+                    rows={2}
+                    style={styles.reasonTextarea}
+                  />
+                </label>
+              )}
+            </div>
+          </article>
+        ))}
       </div>
-
       {message && <div style={styles.message}>{message}</div>}
       <div style={styles.formActions}>
         <button onClick={() => { setVisitStep(1); setVisitMessage(''); }} style={styles.secondaryButton}>← Back</button>
-        <button onClick={saveChecklistVisit} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Save Visit'}</button>
+        <button onClick={onSaveChecklist} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Save Checklist & Continue →'}</button>
       </div>
+    </>}
+
+    {visitStep === 3 && <>
+      <div style={styles.activeVisitCard}>
+        <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
+        <h3 style={styles.activeVisitTitle}>{visit.outletName || 'Selected store'}</h3>
+        <p style={styles.activeVisitText}>The visit timer started when you tapped Start Visit. Stock, expiry, sampling and feedback will be added here next.</p>
+        <div style={styles.formActions}>
+          <button onClick={onStop} disabled={saving} style={styles.stopButton}>{saving ? 'Stopping…' : 'Stop Visit'}</button>
+        </div>
+      </div>
+      {message && <div style={styles.message}>{message}</div>}
     </>}
   </section>;
 }
