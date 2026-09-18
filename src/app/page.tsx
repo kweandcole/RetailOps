@@ -11,6 +11,7 @@ type VisitDraft = { outletId: string; outletName: string; notes: string };
 type ChecklistKey = 'displayPresent' | 'productsWellDisplayed' | 'priceVisible' | 'staffEngaged' | 'competitorActivity';
 type VisitChecklist = Record<ChecklistKey, boolean | null>;
 type VisitReasons = Record<ChecklistKey, string>;
+type StockEntry = { sku: string; productName: string; shelfStock: string; backStock: string; };
 const navItems: NavItem[] = [
   { label: 'Dashboard', icon: '⌂' }, { label: 'Visits', icon: '✓' }, { label: 'Stores', icon: '▣' },
   { label: 'Sampling', icon: '◎' }, { label: 'Stock', icon: '▤' }, { label: 'Orders', icon: '▱' },
@@ -43,6 +44,12 @@ export default function HomePage() {
   const [visitMessage, setVisitMessage] = useState('');
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
   const [activeVisitStartedAt, setActiveVisitStartedAt] = useState<Date | null>(null);
+  const [stockEntries, setStockEntries] = useState<StockEntry[]>([
+    { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
+    { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
+    { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
+    { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
+  ]);
 
   useEffect(() => {
     try {
@@ -72,6 +79,12 @@ export default function HomePage() {
     setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured'); setVisitStep(1);
     setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
     setChecklistReasons({ displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '' });
+    setStockEntries([
+      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
+      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
+    ]);
     if (outlets.length === 0) {
       try {
         const snapshot = await getDocs(collection(getFirebaseDb(), 'outlets'));
@@ -147,6 +160,31 @@ export default function HomePage() {
     } finally { setSavingVisit(false); }
   }
 
+  async function saveStock() {
+    if (!activeVisitId) { setVisitMessage('Start the visit before saving stock.'); return; }
+    const hasInvalid = stockEntries.some((entry) => entry.shelfStock !== '' && (!Number.isInteger(Number(entry.shelfStock)) || Number(entry.shelfStock) < 0) || entry.backStock !== '' && (!Number.isInteger(Number(entry.backStock)) || Number(entry.backStock) < 0));
+    if (hasInvalid) { setVisitMessage('Stock quantities must be whole numbers of 0 or more.'); return; }
+    setSavingVisit(true); setVisitMessage('');
+    try {
+      const stock = stockEntries.map((entry) => ({
+        sku: entry.sku,
+        productName: entry.productName,
+        shelfStock: entry.shelfStock === '' ? 0 : Number(entry.shelfStock),
+        backStock: entry.backStock === '' ? 0 : Number(entry.backStock),
+        totalStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)),
+        outOfStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)) === 0,
+      }));
+      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+        stock,
+        updatedAt: serverTimestamp(),
+      });
+      setVisitStep(4);
+      setVisitMessage('Stock saved. The visit is still active.');
+    } catch (err) {
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to save stock.');
+    } finally { setSavingVisit(false); }
+  }
+
   async function stopVisit() {
     if (!activeVisitId) {
       setVisitMessage('No active visit is currently running.');
@@ -171,6 +209,12 @@ export default function HomePage() {
       setVisit({ outletId: '', outletName: '', notes: '' });
       setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
       setChecklistReasons({ displayPresent: '', productsWellDisplayed: '', priceVisible: '', staffEngaged: '', competitorActivity: '' });
+      setStockEntries([
+        { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
+        { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
+        { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
+        { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
+      ]);
       setGps(null); setGpsStatus('Not captured');
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to stop visit.');
@@ -206,7 +250,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onSaveChecklist={saveChecklist} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
+      {activeNav === 'Visits' && (visitOpen ? <VisitEntry outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.slice(0, 5).map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
@@ -271,11 +315,14 @@ function VisitEntry({
   setChecklist,
   checklistReasons,
   setChecklistReasons,
+  stockEntries,
+  setStockEntries,
   setVisitMessage,
   gpsStatus,
   onCaptureGps,
   onStart,
   onSaveChecklist,
+  onSaveStock,
   onStop,
   saving,
   message,
@@ -290,11 +337,14 @@ function VisitEntry({
   setChecklist: React.Dispatch<React.SetStateAction<VisitChecklist>>;
   checklistReasons: VisitReasons;
   setChecklistReasons: React.Dispatch<React.SetStateAction<VisitReasons>>;
+  stockEntries: StockEntry[];
+  setStockEntries: React.Dispatch<React.SetStateAction<StockEntry[]>>;
   setVisitMessage: React.Dispatch<React.SetStateAction<string>>;
   gpsStatus: string;
   onCaptureGps: () => void;
   onStart: () => void;
   onSaveChecklist: () => void;
+  onSaveStock: () => void;
   onStop: () => void;
   saving: boolean;
   message: string;
@@ -318,12 +368,12 @@ function VisitEntry({
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
       <div>
-        <div style={styles.eyebrow}>STORE VISIT · STEP {visitStep} OF 3</div>
+        <div style={styles.eyebrow}>STORE VISIT · STEP {visitStep} OF 4</div>
         <h2 style={styles.sectionTitle}>
-          {visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : 'Visit in progress'}
+          {visitStep === 1 ? 'Start a store visit' : visitStep === 2 ? 'Visit checklist' : visitStep === 3 ? 'Stock count' : 'Visit in progress'}
         </h2>
         <p style={styles.sectionSubtitle}>
-          {visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : 'The visit remains active while you complete the remaining tasks.'}
+          {visitStep === 1 ? 'Confirm the store and capture the visit location.' : visitStep === 2 ? 'Record what you observed during the store visit.' : visitStep === 3 ? 'Count the Kwe & Cole products available in the store.' : 'The visit remains active while you complete the remaining tasks.'}
         </p>
       </div>
       {visitStep !== 3 && <button onClick={onClose} style={styles.secondaryButton}>Cancel</button>}
@@ -422,6 +472,49 @@ function VisitEntry({
       </div>
     </>}
 
+    {visitStep === 4 && <>
+      <div style={styles.stockIntro}>
+        <div>
+          <strong style={styles.checklistProgress}>4 SKUs to count</strong>
+          <span style={styles.checklistProgressText}>Enter shelf and back-stock quantities. Use 0 when none are available.</span>
+        </div>
+      </div>
+      <div style={styles.stockGrid}>
+        {stockEntries.map((entry, index) => {
+          const total = (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock));
+          const isOos = total === 0 && entry.shelfStock !== '' && entry.backStock !== '';
+          return <article key={entry.sku} style={styles.stockCard}>
+            <div style={styles.stockHeader}>
+              <div style={styles.checklistNumber}>{index + 1}</div>
+              <div style={{ flex: 1 }}>
+                <strong style={styles.checklistLabel}>{entry.productName}</strong>
+                <span style={styles.stockSku}>{entry.sku}</span>
+              </div>
+              {isOos && <span style={styles.oosBadge}>OUT OF STOCK</span>}
+            </div>
+            <div style={styles.stockInputs}>
+              <label style={styles.stockField}>
+                <span style={styles.fieldLabel}>Shelf stock</span>
+                <input type="number" min="0" step="1" inputMode="numeric" value={entry.shelfStock} onChange={(e) => setStockEntries((current) => current.map((x) => x.sku === entry.sku ? { ...x, shelfStock: e.target.value } : x))} placeholder="0" style={styles.stockInput} />
+              </label>
+              <label style={styles.stockField}>
+                <span style={styles.fieldLabel}>Back stock</span>
+                <input type="number" min="0" step="1" inputMode="numeric" value={entry.backStock} onChange={(e) => setStockEntries((current) => current.map((x) => x.sku === entry.sku ? { ...x, backStock: e.target.value } : x))} placeholder="0" style={styles.stockInput} />
+              </label>
+              <div style={styles.stockTotal}>
+                <span>Total</span><strong>{total}</strong>
+              </div>
+            </div>
+          </article>;
+        })}
+      </div>
+      {message && <div style={styles.message}>{message}</div>}
+      <div style={styles.formActions}>
+        <button onClick={() => { setVisitStep(2); setVisitMessage(''); }} style={styles.secondaryButton}>← Back</button>
+        <button onClick={onSaveStock} disabled={saving} style={styles.darkButton}>{saving ? 'Saving…' : 'Save Stock & Continue →'}</button>
+      </div>
+    </>}
+    
     {visitStep === 3 && <>
       <div style={styles.activeVisitCard}>
         <div style={styles.activeVisitBadge}>● VISIT ACTIVE</div>
@@ -440,5 +533,5 @@ function Brand() { return <div style={styles.brand}><div style={styles.brandEyeb
 function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) { return <button onClick={onClick} style={{ ...styles.navButton, ...(active ? styles.navButtonActive : {}) }}><span style={styles.navIcon}>{item.icon}</span><span>{item.label}</span></button>; }
 function UserCard({ user }: { user: User }) { return <div style={styles.userCard}><div style={styles.avatar}>{(user.displayName || user.email || 'U').charAt(0).toUpperCase()}</div><div style={{ minWidth: 0 }}><div style={styles.userName}>{user.displayName || 'Signed-in user'}</div><div style={styles.userEmail}>{user.email}</div></div></div>; }
 const styles: Record<string, React.CSSProperties> = {
-  app: { minHeight: '100vh', background: '#f7f7f5', color: '#171717', display: 'flex' }, sidebar: { width: 240, background: '#fff', borderRight: '1px solid #e7e5e0', padding: 22, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', position: 'fixed', inset: '0 auto 0 0', zIndex: 10 }, brand: { padding: '6px 10px 28px' }, brandEyebrow: { fontSize: 10, fontWeight: 800, letterSpacing: 2, marginBottom: 4 }, brandName: { fontSize: 23, fontWeight: 800, letterSpacing: -0.8 }, sideNav: { display: 'grid', gap: 5 }, navButton: { appearance: 'none', border: 0, background: 'transparent', borderRadius: 10, padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#5f5d58', cursor: 'pointer' }, navButtonActive: { background: '#171717', color: '#fff' }, navIcon: { width: 20, textAlign: 'center', fontSize: 16 }, sidebarBottom: { marginTop: 'auto' }, userCard: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: '1px solid #eee' }, avatar: { width: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }, userName: { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, userEmail: { fontSize: 10, color: '#777', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }, signOutButton: { width: '100%', border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '9px 12px', fontWeight: 600, cursor: 'pointer' }, main: { marginLeft: 240, width: 'calc(100% - 240px)', minHeight: '100vh', padding: '36px 42px 48px', boxSizing: 'border-box' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }, mobileBrand: { display: 'none' }, pageTitle: { fontSize: 30, margin: 0, letterSpacing: -1 }, pageSubtitle: { color: '#777', margin: '6px 0 0', fontSize: 14 }, headerUser: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: '#555' }, headerSignOut: { border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '8px 11px', cursor: 'pointer' }, welcomeCard: { background: '#171717', color: '#fff', borderRadius: 18, padding: '28px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, marginBottom: 18 }, welcomeTitle: { fontSize: 25, margin: '6px 0', letterSpacing: -0.7 }, welcomeText: { margin: 0, color: '#d2d2d2', fontSize: 14 }, primaryButton: { border: 0, borderRadius: 10, background: '#fff', color: '#171717', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, darkButton: { border: 0, borderRadius: 10, background: '#171717', color: '#fff', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, secondaryButton: { border: '1px solid #ddd', borderRadius: 10, background: '#fff', color: '#333', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }, smallButton: { border: '1px solid #ddd', borderRadius: 9, background: '#fff', color: '#333', padding: '8px 10px', fontWeight: 700, cursor: 'pointer', marginTop: 8, alignSelf: 'flex-start' }, kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 18 }, kpiCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 19 }, kpiLabel: { color: '#777', fontSize: 12, fontWeight: 700 }, kpiValue: { fontSize: 30, fontWeight: 800, margin: '9px 0 4px', letterSpacing: -1 }, kpiDetail: { color: '#999', fontSize: 11 }, sectionCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 22 }, sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }, sectionTitle: { margin: 0, fontSize: 19 }, sectionSubtitle: { margin: '5px 0 0', color: '#888', fontSize: 12 }, statusPill: { borderRadius: 20, padding: '5px 9px', background: '#f0f0ed', fontSize: 10, fontWeight: 800 }, emptyState: { minHeight: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#777', textAlign: 'center' }, emptyIcon: { width: 38, height: 38, borderRadius: 12, background: '#f1f1ee', display: 'grid', placeItems: 'center', color: '#555', fontWeight: 800 }, loginPage: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f7f7f5', boxSizing: 'border-box' }, loginCard: { width: '100%', maxWidth: 420, background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 12px 40px rgba(0,0,0,.08)', boxSizing: 'border-box' }, eyebrow: { fontSize: 11, fontWeight: 800, letterSpacing: 1.7 }, loginTitle: { fontSize: 32, margin: '8px 0 10px', letterSpacing: -1 }, loginText: { color: '#666', lineHeight: 1.5, marginBottom: 28 }, googleButton: { width: '100%', border: 0, borderRadius: 12, padding: '14px 16px', background: '#171717', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }, error: { marginTop: 16, padding: 12, borderRadius: 10, background: '#fff3f3', color: '#a40000', fontSize: 13, lineHeight: 1.45 }, bottomNav: { display: 'none' }, bottomNavButton: { border: 0, background: 'transparent', color: '#777', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 9, padding: '7px 2px', fontWeight: 600 }, bottomNavButtonActive: { color: '#171717', fontWeight: 800 }, bottomIcon: { fontSize: 17, lineHeight: 1 }, checklistIntro: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, checklistProgress: { display: 'block', fontSize: 12, fontWeight: 800 }, checklistProgressText: { display: 'block', marginTop: 2, color: '#888', fontSize: 11 }, checklistCount: { minWidth: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }, checklistGrid: { display: 'grid', gap: 10 }, checklistItem: { display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr)', gap: 12, padding: 15, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fff', boxSizing: 'border-box' }, checklistItemAnswered: { borderColor: '#d5d3cd' }, checklistNumber: { width: 32, height: 32, borderRadius: 10, background: '#f0f0ed', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: '#666' }, checklistContent: { minWidth: 0 }, checklistLabel: { display: 'block', fontSize: 14, lineHeight: 1.3 }, checklistHelp: { margin: '5px 0 12px', color: '#888', fontSize: 11, lineHeight: 1.45 }, answerGroup: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 210 }, answerButton: { minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, background: '#fafaf8', color: '#555', padding: '9px 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }, answerButtonYesActive: { background: '#171717', color: '#fff', borderColor: '#171717' }, answerButtonNoActive: { background: '#ecebe7', color: '#171717', borderColor: '#cfcfc8' }, answerIcon: { fontSize: 14, marginRight: 4 }, activeVisitCard: { border: '1px solid #e7e5e0', borderRadius: 14, padding: 18, background: '#fafaf8' }, activeVisitBadge: { display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: '6px 9px', borderRadius: 20, background: '#171717', color: '#fff' }, activeVisitTitle: { margin: '14px 0 5px', fontSize: 19 }, activeVisitText: { margin: 0, color: '#777', fontSize: 12, lineHeight: 1.5 }, stopButton: { border: '1px solid #171717', borderRadius: 10, background: '#fff', color: '#171717', padding: '11px 16px', fontWeight: 800, cursor: 'pointer' }, reasonField: { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }, reasonLabel: { fontSize: 10, fontWeight: 800, color: '#777', textTransform: 'uppercase', letterSpacing: .6 }, reasonTextarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 9, padding: '9px 10px', fontSize: 12, resize: 'vertical', background: '#fff' }, formGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }, field: { display: 'flex', flexDirection: 'column', gap: 7 }, fieldLabel: { fontSize: 11, color: '#777', fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7 }, input: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14 }, textarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14, resize: 'vertical' }, infoBox: { border: '1px solid #e7e5e0', borderRadius: 11, padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 78, boxSizing: 'border-box' }, muted: { color: '#999', fontSize: 11 }, formActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }, message: { marginTop: 16, padding: 12, borderRadius: 10, background: '#f4f4f1', color: '#333', fontSize: 13 }, visitList: { display: 'grid', gap: 8 }, visitRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 14px', border: '1px solid #e7e5e0', borderRadius: 11 }, visitStore: { fontSize: 14 }, visitMeta: { marginTop: 4, color: '#888', fontSize: 11 }
+  app: { minHeight: '100vh', background: '#f7f7f5', color: '#171717', display: 'flex' }, sidebar: { width: 240, background: '#fff', borderRight: '1px solid #e7e5e0', padding: 22, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', position: 'fixed', inset: '0 auto 0 0', zIndex: 10 }, brand: { padding: '6px 10px 28px' }, brandEyebrow: { fontSize: 10, fontWeight: 800, letterSpacing: 2, marginBottom: 4 }, brandName: { fontSize: 23, fontWeight: 800, letterSpacing: -0.8 }, sideNav: { display: 'grid', gap: 5 }, navButton: { appearance: 'none', border: 0, background: 'transparent', borderRadius: 10, padding: '11px 12px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', fontSize: 14, fontWeight: 600, color: '#5f5d58', cursor: 'pointer' }, navButtonActive: { background: '#171717', color: '#fff' }, navIcon: { width: 20, textAlign: 'center', fontSize: 16 }, sidebarBottom: { marginTop: 'auto' }, userCard: { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px', borderTop: '1px solid #eee' }, avatar: { width: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0 }, userName: { fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, userEmail: { fontSize: 10, color: '#777', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 170 }, signOutButton: { width: '100%', border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '9px 12px', fontWeight: 600, cursor: 'pointer' }, main: { marginLeft: 240, width: 'calc(100% - 240px)', minHeight: '100vh', padding: '36px 42px 48px', boxSizing: 'border-box' }, header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }, mobileBrand: { display: 'none' }, pageTitle: { fontSize: 30, margin: 0, letterSpacing: -1 }, pageSubtitle: { color: '#777', margin: '6px 0 0', fontSize: 14 }, headerUser: { display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: '#555' }, headerSignOut: { border: '1px solid #ddd', background: '#fff', borderRadius: 9, padding: '8px 11px', cursor: 'pointer' }, welcomeCard: { background: '#171717', color: '#fff', borderRadius: 18, padding: '28px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, marginBottom: 18 }, welcomeTitle: { fontSize: 25, margin: '6px 0', letterSpacing: -0.7 }, welcomeText: { margin: 0, color: '#d2d2d2', fontSize: 14 }, primaryButton: { border: 0, borderRadius: 10, background: '#fff', color: '#171717', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, darkButton: { border: 0, borderRadius: 10, background: '#171717', color: '#fff', padding: '12px 17px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }, secondaryButton: { border: '1px solid #ddd', borderRadius: 10, background: '#fff', color: '#333', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }, smallButton: { border: '1px solid #ddd', borderRadius: 9, background: '#fff', color: '#333', padding: '8px 10px', fontWeight: 700, cursor: 'pointer', marginTop: 8, alignSelf: 'flex-start' }, kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 14, marginBottom: 18 }, kpiCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 19 }, kpiLabel: { color: '#777', fontSize: 12, fontWeight: 700 }, kpiValue: { fontSize: 30, fontWeight: 800, margin: '9px 0 4px', letterSpacing: -1 }, kpiDetail: { color: '#999', fontSize: 11 }, sectionCard: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 15, padding: 22 }, sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 20 }, sectionTitle: { margin: 0, fontSize: 19 }, sectionSubtitle: { margin: '5px 0 0', color: '#888', fontSize: 12 }, statusPill: { borderRadius: 20, padding: '5px 9px', background: '#f0f0ed', fontSize: 10, fontWeight: 800 }, emptyState: { minHeight: 180, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#777', textAlign: 'center' }, emptyIcon: { width: 38, height: 38, borderRadius: 12, background: '#f1f1ee', display: 'grid', placeItems: 'center', color: '#555', fontWeight: 800 }, loginPage: { minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#f7f7f5', boxSizing: 'border-box' }, loginCard: { width: '100%', maxWidth: 420, background: '#fff', borderRadius: 20, padding: 32, boxShadow: '0 12px 40px rgba(0,0,0,.08)', boxSizing: 'border-box' }, eyebrow: { fontSize: 11, fontWeight: 800, letterSpacing: 1.7 }, loginTitle: { fontSize: 32, margin: '8px 0 10px', letterSpacing: -1 }, loginText: { color: '#666', lineHeight: 1.5, marginBottom: 28 }, googleButton: { width: '100%', border: 0, borderRadius: 12, padding: '14px 16px', background: '#171717', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }, error: { marginTop: 16, padding: 12, borderRadius: 10, background: '#fff3f3', color: '#a40000', fontSize: 13, lineHeight: 1.45 }, bottomNav: { display: 'none' }, bottomNavButton: { border: 0, background: 'transparent', color: '#777', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 9, padding: '7px 2px', fontWeight: 600 }, bottomNavButtonActive: { color: '#171717', fontWeight: 800 }, bottomIcon: { fontSize: 17, lineHeight: 1 }, checklistIntro: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, checklistProgress: { display: 'block', fontSize: 12, fontWeight: 800 }, checklistProgressText: { display: 'block', marginTop: 2, color: '#888', fontSize: 11 }, checklistCount: { minWidth: 34, height: 34, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800 }, checklistGrid: { display: 'grid', gap: 10 }, checklistItem: { display: 'grid', gridTemplateColumns: '32px minmax(0, 1fr)', gap: 12, padding: 15, border: '1px solid #e7e5e0', borderRadius: 13, background: '#fff', boxSizing: 'border-box' }, checklistItemAnswered: { borderColor: '#d5d3cd' }, checklistNumber: { width: 32, height: 32, borderRadius: 10, background: '#f0f0ed', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 800, color: '#666' }, checklistContent: { minWidth: 0 }, checklistLabel: { display: 'block', fontSize: 14, lineHeight: 1.3 }, checklistHelp: { margin: '5px 0 12px', color: '#888', fontSize: 11, lineHeight: 1.45 }, answerGroup: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 210 }, answerButton: { minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, background: '#fafaf8', color: '#555', padding: '9px 12px', fontWeight: 800, fontSize: 13, cursor: 'pointer' }, answerButtonYesActive: { background: '#171717', color: '#fff', borderColor: '#171717' }, answerButtonNoActive: { background: '#ecebe7', color: '#171717', borderColor: '#cfcfc8' }, answerIcon: { fontSize: 14, marginRight: 4 }, activeVisitCard: { border: '1px solid #e7e5e0', borderRadius: 14, padding: 18, background: '#fafaf8' }, activeVisitBadge: { display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: '6px 9px', borderRadius: 20, background: '#171717', color: '#fff' }, activeVisitTitle: { margin: '14px 0 5px', fontSize: 19 }, activeVisitText: { margin: 0, color: '#777', fontSize: 12, lineHeight: 1.5 }, stopButton: { border: '1px solid #171717', borderRadius: 10, background: '#fff', color: '#171717', padding: '11px 16px', fontWeight: 800, cursor: 'pointer' }, reasonField: { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 10 }, reasonLabel: { fontSize: 10, fontWeight: 800, color: '#777', textTransform: 'uppercase', letterSpacing: .6 }, reasonTextarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 9, padding: '9px 10px', fontSize: 12, resize: 'vertical', background: '#fff' }, stockIntro: { marginBottom: 12, padding: '11px 13px', borderRadius: 11, background: '#f7f7f5', border: '1px solid #e7e5e0' }, stockGrid: { display: 'grid', gap: 10 }, stockCard: { border: '1px solid #e7e5e0', borderRadius: 13, padding: 15, background: '#fff' }, stockHeader: { display: 'flex', alignItems: 'center', gap: 10 }, stockSku: { display: 'block', marginTop: 3, color: '#999', fontSize: 10, fontWeight: 700 }, stockInputs: { display: 'grid', gridTemplateColumns: '1fr 1fr 70px', gap: 8, alignItems: 'end', marginTop: 13 }, stockField: { display: 'flex', flexDirection: 'column', gap: 5 }, stockInput: { width: '100%', boxSizing: 'border-box', minHeight: 42, border: '1px solid #d9d7d1', borderRadius: 10, padding: '9px 10px', fontSize: 14, background: '#fafaf8' }, stockTotal: { minHeight: 42, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: 10, background: '#f0f0ed', color: '#777', fontSize: 9, textTransform: 'uppercase', letterSpacing: .5 }, stockTotal strong: { display: 'block', color: '#171717', fontSize: 16 }, oosBadge: { fontSize: 9, fontWeight: 800, padding: '5px 7px', borderRadius: 20, background: '#171717', color: '#fff', whiteSpace: 'nowrap' }, formGrid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }, field: { display: 'flex', flexDirection: 'column', gap: 7 }, fieldLabel: { fontSize: 11, color: '#777', fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7 }, input: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14 }, textarea: { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 10, padding: '12px 13px', background: '#fff', fontSize: 14, resize: 'vertical' }, infoBox: { border: '1px solid #e7e5e0', borderRadius: 11, padding: 14, display: 'flex', flexDirection: 'column', gap: 6, minHeight: 78, boxSizing: 'border-box' }, muted: { color: '#999', fontSize: 11 }, formActions: { display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }, message: { marginTop: 16, padding: 12, borderRadius: 10, background: '#f4f4f1', color: '#333', fontSize: 13 }, visitList: { display: 'grid', gap: 8 }, visitRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 14px', border: '1px solid #e7e5e0', borderRadius: 11 }, visitStore: { fontSize: 14 }, visitMeta: { marginTop: 4, color: '#888', fontSize: 11 }
 };
