@@ -103,13 +103,14 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    const uid = user.uid;
 
     async function restoreActiveSamplingVisit() {
       try {
         const db = getFirebaseDb();
         const snapshot = await getDocs(query(
           collection(db, 'visits'),
-          where('repUid', '==', user.uid)
+          where('repUid', '==', uid)
         ));
         if (cancelled) return;
 
