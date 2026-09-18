@@ -1452,6 +1452,14 @@ function Brand() { return <div style={styles.brand}><div style={styles.brandEyeb
 function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) { return <button onClick={onClick} style={{ ...styles.navButton, ...(active ? styles.navButtonActive : {}) }}><span style={styles.navIcon}>{item.icon}</span><span>{item.label}</span></button>; }
 function UserCard({ user }: { user: User }) { return <div style={styles.userCard}><div style={styles.avatar}>{(user.displayName || user.email || 'U').charAt(0).toUpperCase()}</div><div style={{ minWidth: 0 }}><div style={styles.userName}>{user.displayName || 'Signed-in user'}</div><div style={styles.userEmail}>{user.email}</div></div></div>; }
 const styles: Record<string, React.CSSProperties> = {
+  app: { minHeight: '100vh', background: '#f7f7f5', color: '#171717' },
+  sidebar: { position: 'fixed', inset: '0 auto 0 0', width: 240, padding: '28px 18px 20px', boxSizing: 'border-box', background: '#fff', borderRight: '1px solid #e7e5e0', display: 'flex', flexDirection: 'column', zIndex: 10 },
+  brand: { padding: '0 8px 28px' },
+  brandEyebrow: { fontSize: 10, fontWeight: 900, letterSpacing: 1.8, color: '#777' },
+  sideNav: { display: 'grid', gap: 5 },
+  navButton: { width: '100%', border: 0, borderRadius: 10, background: 'transparent', color: '#666', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', textAlign: 'left', fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+  navButtonActive: { background: '#171717', color: '#fff' },
+  navIcon: { width: 20, textAlign: 'center', fontSize: 14, lineHeight: 1 },
   visitFilters: { display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' },
   filterButton: { padding: '7px 11px', border: '1px solid #ddd', borderRadius: 999, background: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' },
   filterActive: { padding: '7px 11px', border: '1px solid #171717', borderRadius: 999, background: '#171717', color: '#fff', fontSize: 10, fontWeight: 800, cursor: 'pointer' },
