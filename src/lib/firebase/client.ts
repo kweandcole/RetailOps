@@ -1,9 +1,10 @@
 import { FirebaseApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 let firebaseApp: FirebaseApp | undefined;
+let firebaseDb: ReturnType<typeof getFirestore> | undefined;
 
 function getFirebaseConfig() {
   const config = {
@@ -42,7 +43,20 @@ export function getGoogleProvider() {
 }
 
 export function getFirebaseDb() {
-  return getFirestore(getFirebaseApp());
+  if (firebaseDb) return firebaseDb;
+
+  const app = getFirebaseApp();
+  try {
+    firebaseDb = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch {
+    // Firestore may already have been initialized by another module instance.
+    firebaseDb = getFirestore(app);
+  }
+  return firebaseDb;
 }
 
 export function getFirebaseStorage() {
