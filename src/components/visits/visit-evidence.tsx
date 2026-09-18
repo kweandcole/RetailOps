@@ -23,7 +23,7 @@ type EvidenceFile = {
 
 const PHOTO_TYPES = ['Shelf / Stock', 'Display', 'Price / POS', 'Sampling', 'Competitor', 'Other'];
 
-export default function VisitEvidence({ user }: { user: User }) {
+export default function VisitEvidence({ user, activeVisitId }: { user: User; activeVisitId: string }) {
   const [visit, setVisit] = useState<ActiveVisit | null>(null);
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [photoType, setPhotoType] = useState('Shelf / Stock');
@@ -33,10 +33,10 @@ export default function VisitEvidence({ user }: { user: User }) {
   useEffect(() => {
     const q = query(collection(getFirebaseDb(), 'visits'), where('repUid', '==', user.uid), where('status', '==', 'STARTED'));
     return onSnapshot(q, (snapshot) => {
-      const doc = snapshot.docs[0];
-      setVisit(doc ? { id: doc.id, ...(doc.data() as Omit<ActiveVisit, 'id'>) } : null);
+      const match = snapshot.docs.find((doc) => doc.id === activeVisitId);
+      setVisit(match ? { id: match.id, ...(match.data() as Omit<ActiveVisit, 'id'>) } : null);
     }, () => setVisit(null));
-  }, [user.uid]);
+  }, [user.uid, activeVisitId]);
 
   useEffect(() => {
     if (!visit) { setFiles([]); return; }
