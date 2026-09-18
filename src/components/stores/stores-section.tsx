@@ -18,7 +18,7 @@ type Store = {
   active?: boolean;
 };
 
-export default function StoresSection() {
+export default function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }\n\nexport default function StoresSection() {
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'All' | StoreStatus>('All');
@@ -28,6 +28,7 @@ export default function StoresSection() {
   const [error, setError] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [visitedToday, setVisitedToday] = useState<Set<string>>(new Set());
+  const [latestVisits, setLatestVisits] = useState<Record<string, Record<string, any>>>({});
 
   async function loadStores() {
     setLoading(true); setError('');
@@ -41,12 +42,19 @@ export default function StoresSection() {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const visited = new Set<string>();
+      const latest: Record<string, Record<string, any>> = {};
       visitSnapshot.docs.forEach((item) => {
         const visit = item.data() as Record<string, any>;
         const timestamp = visit.createdAt?.toDate?.() || visit.startedAt?.toDate?.();
-        if (visit.outletId && timestamp instanceof Date && timestamp >= startOfToday) visited.add(String(visit.outletId));
+        if (!visit.outletId || !(timestamp instanceof Date)) return;
+        const outletId = String(visit.outletId);
+        if (timestamp >= startOfToday) visited.add(outletId);
+        const existing = latest[outletId];
+        const existingTime = existing?.createdAt?.toDate?.() || existing?.startedAt?.toDate?.();
+        if (!existing || timestamp.getTime() > (existingTime instanceof Date ? existingTime.getTime() : 0)) latest[outletId] = { id: item.id, ...visit };
       });
       setVisitedToday(visited);
+      setLatestVisits(latest);
       setStores(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load stores from Firestore.');
@@ -108,6 +116,11 @@ export default function StoresSection() {
       <div style={styles.list}>
         {!loading && filteredStores.map((store) => <article key={store.outletId} style={styles.card}>
           <div style={styles.cardTop}><div><div style={styles.retailer}>{store.retailer}</div><h2 style={styles.branch}>{store.branchName}</h2><div style={styles.location}>{store.location}</div></div><span style={{ ...styles.status, ...(visitedToday.has(store.outletId) || store.status === 'Visited' ? styles.statusVisited : styles.statusPending) }}>{visitedToday.has(store.outletId) || store.status === 'Visited' ? 'Visited' : 'Pending'}</span></div>
+          {latestVisits[store.outletId] && <div style={styles.visitSummary}>
+            <div style={styles.visitSummaryHead}><strong>Last visit</strong><span>{latestVisits[store.outletId].visitType === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL'}</span></div>
+            <div style={styles.visitSummaryMeta}>{formatDate(latestVisits[store.outletId].createdAt || latestVisits[store.outletId].startedAt)} · {latestVisits[store.outletId].repName || 'Field rep'} · {latestVisits[store.outletId].status || '—'}</div>
+            {latestVisits[store.outletId].notes && <div style={styles.visitSummaryNotes}>{latestVisits[store.outletId].notes}</div>}
+          </div>}
           <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><div style={styles.cardActions}><button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button><button style={styles.visitButton}>Start visit</button></div></div>
           {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} />}
         </article>)}
