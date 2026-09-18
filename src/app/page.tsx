@@ -291,10 +291,26 @@ export default function HomePage() {
         totalStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)),
         outOfStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)) === 0,
       }));
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'visits', activeVisitId), {
         stock,
         updatedAt: serverTimestamp(),
       });
+      for (const item of stock) {
+        batch.set(doc(db, 'stock', `${visit.outletId}_${item.sku}`), {
+          outletId: visit.outletId,
+          outletName: visit.outletName,
+          sku: item.sku,
+          productName: item.productName,
+          quantity: item.totalStock,
+          source: 'VISIT_STOCK_COUNT',
+          visitId: activeVisitId,
+          repUid: user?.uid || '',
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+      await batch.commit();
       setVisitStep(4);
       setVisitMessage('Stock saved. The visit is still active.');
     } catch (err) {
@@ -520,6 +536,7 @@ export default function HomePage() {
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
       {activeNav === 'Stores' && <StoresSection />}
+      {activeNav === 'Stock' && <StockLanding />}
       {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && <PlaceholderSection title={activeNav} />}
     </main>
@@ -585,6 +602,87 @@ function formatDuration(totalSeconds: number) {
   return hours > 0
     ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function StockLanding() {
+  const [rows, setRows] = useState<Array<{ id: string; outletId: string; outletName: string; sku: string; productName: string; quantity: number; updatedAt?: { toDate?: () => Date } }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'OOS' | 'LOW'>('ALL');
+
+  async function loadStock() {
+    setLoading(true);
+    try {
+      const snapshot = await getDocs(collection(getFirebaseDb(), 'stock'));
+      const loaded = snapshot.docs.map((item) => {
+        const data = item.data() as Partial<(typeof rows)[number]>;
+        return {
+          id: item.id,
+          outletId: data.outletId || '',
+          outletName: data.outletName || 'Unnamed store',
+          sku: data.sku || '',
+          productName: data.productName || data.sku || 'Unknown product',
+          quantity: Number(data.quantity || 0),
+          updatedAt: data.updatedAt,
+        };
+      });
+      loaded.sort((a, b) => a.outletName.localeCompare(b.outletName) || a.productName.localeCompare(b.productName));
+      setRows(loaded);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadStock(); }, []);
+
+  const filtered = rows.filter((row) => {
+    const haystack = `${row.outletName} ${row.productName} ${row.sku}`.toLowerCase();
+    const matchesSearch = haystack.includes(search.toLowerCase());
+    const matchesFilter = filter === 'ALL' || (filter === 'OOS' ? row.quantity === 0 : row.quantity > 0 && row.quantity <= 5);
+    return matchesSearch && matchesFilter;
+  });
+
+  const oosCount = rows.filter((row) => row.quantity === 0).length;
+  const lowCount = rows.filter((row) => row.quantity > 0 && row.quantity <= 5).length;
+
+  return <section style={styles.sectionCard}>
+    <div style={styles.sectionHeader}>
+      <div>
+        <h2 style={styles.sectionTitle}>Stock overview</h2>
+        <p style={styles.sectionSubtitle}>Latest recorded stock by store and SKU. Low stock means 5 bottles or fewer.</p>
+      </div>
+      <button onClick={() => void loadStock()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 14 }}>
+      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Stock records</div><div style={styles.kpiValue}>{rows.length}</div></div>
+      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Out of stock</div><div style={styles.kpiValue}>{oosCount}</div></div>
+      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Low stock</div><div style={styles.kpiValue}>{lowCount}</div></div>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 14 }}>
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or sauce…" style={styles.input} />
+      <div style={{ display: 'flex', gap: 7 }}>
+        {(['ALL', 'OOS', 'LOW'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={filter === item ? styles.darkButton : styles.secondaryButton}>{item === 'ALL' ? 'All' : item === 'OOS' ? 'Out of stock' : 'Low stock'}</button>)}
+      </div>
+    </div>
+    {loading && rows.length === 0 ? <div style={styles.emptyState}><strong>Loading stock…</strong></div> :
+      filtered.length === 0 ? <div style={styles.emptyState}><strong>No stock records found</strong><span>Stock will appear here after a stock count or completed sampling session.</span></div> :
+      <div style={styles.visitList}>{filtered.map((row) => {
+        const updated = row.updatedAt?.toDate?.();
+        const status = row.quantity === 0 ? 'OUT' : row.quantity <= 5 ? 'LOW' : 'OK';
+        return <article key={row.id} style={styles.visitRow}>
+          <div style={{ minWidth: 0 }}>
+            <strong style={styles.visitStore}>{row.outletName}</strong>
+            <div style={styles.visitMeta}>{row.productName} · {row.sku}{updated ? ` · Updated ${updated.toLocaleString()}` : ''}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <strong style={{ fontSize: 18 }}>{row.quantity}</strong>
+            <div style={styles.statusPill}>{status}</div>
+          </div>
+        </article>;
+      })}</div>}
+  </section>;
 }
 
 function VisitEntry({
