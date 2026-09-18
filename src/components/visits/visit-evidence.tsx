@@ -17,6 +17,7 @@ type EvidenceFile = {
   fileName: string;
   photoType: string;
   driveUrl?: string | null;
+  thumbnailUrl?: string | null;
   uploadedAt?: any;
 };
 
@@ -67,6 +68,7 @@ export default function VisitEvidence({ user }: { user: User }) {
         fileId: result.file.id,
         fileName: result.file.name,
         driveUrl: result.file.webViewLink || null,
+        thumbnailUrl: result.file.thumbnailLink || null,
         photoType: result.file.photoType,
         uploadedAt: serverTimestamp(),
         uploadedBy: user.uid,
@@ -146,7 +148,8 @@ const styles: Record<string, React.CSSProperties> = {
   message: { marginTop: 10, padding: 10, borderRadius: 9, background: '#f4f4f1', color: '#555', fontSize: 11 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 9, marginTop: 14 },
   photoCard: { border: '1px solid #e8e6e1', borderRadius: 10, overflow: 'hidden', color: '#171717', textDecoration: 'none', background: '#fafaf8' },
-  thumbnail: { height: 115, display: 'grid', placeItems: 'center', position: 'relative', background: '#ecebe7' },
+  thumbnail: { height: 115, display: 'grid', placeItems: 'center', position: 'relative', background: '#ecebe7', overflow: 'hidden' },
+  thumbnailImage: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
   camera: { fontSize: 25, opacity: 0.55 },
   typeBadge: { position: 'absolute', left: 7, bottom: 7, padding: '4px 6px', borderRadius: 6, background: '#171717', color: '#fff', fontSize: 8, fontWeight: 800 },
   photoFooter: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 7, padding: '8px 9px' },
