@@ -1,7 +1,6 @@
 import { FirebaseApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 let firebaseApp: FirebaseApp | undefined;
 let firebaseDb: ReturnType<typeof getFirestore> | undefined;
@@ -59,6 +58,3 @@ export function getFirebaseDb() {
   return firebaseDb;
 }
 
-export function getFirebaseStorage() {
-  return getStorage(getFirebaseApp());
-}
