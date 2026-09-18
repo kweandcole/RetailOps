@@ -598,6 +598,7 @@ function VisitEntry({
   samplingClosingCustomers,
   setSamplingClosingCustomers,
   activeVisitElapsedSeconds,
+  activeVisitStartedAt,
   onSaveChecklist,
   onSaveStock,
   onSaveExpiry,
