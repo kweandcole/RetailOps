@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebase/client';
 import StoresSection from '@/components/stores/stores-section';
 
@@ -397,7 +397,23 @@ export default function HomePage() {
       const now = Date.now();
       const startedMs = activeVisitStartedAt?.getTime();
       const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+      for (const item of closingStock) {
+        const stockRef = doc(db, 'stock', `${visit.outletId}_${item.sku}`);
+        batch.set(stockRef, {
+          outletId: visit.outletId,
+          outletName: visit.outletName,
+          sku: item.sku,
+          productName: item.productName,
+          quantity: item.remainingStock,
+          source: 'SAMPLING',
+          visitId: activeVisitId,
+          repUid: user?.uid || '',
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+      batch.update(doc(db, 'visits', activeVisitId), {
         sampling: {
           conducted: true,
           customersSampled: Number(samplingClosingCustomers),
@@ -412,7 +428,8 @@ export default function HomePage() {
         durationMinutes,
         updatedAt: serverTimestamp(),
       });
-      setVisitMessage('Sampling visit completed and saved.');
+      await batch.commit();
+      setVisitMessage('Sampling visit completed and saved. Remaining stock has been updated automatically.');
       setActiveVisitId(null); setActiveVisitStartedAt(null); setActiveVisitElapsedSeconds(0); setVisitOpen(false); setVisitStep(1);
       setVisit({ outletId: '', outletName: '', notes: '' });
       setSamplingClosingSales({ 'SKU-001': '', 'SKU-002': '', 'SKU-003': '', 'SKU-004': '' });
