@@ -147,10 +147,22 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       {message && <div style={styles.message}>{message}</div>}
       {error && <div role="alert" style={styles.error}>{error}</div>}
 
-      <div style={styles.mapPlaceholder}>
-        <div style={styles.mapGrid} />
-        <div style={styles.mapLabel}>Store map</div>
-        {filteredStores.slice(0, 8).map((store, index) => <span key={store.outletId} title={store.branchName} style={{ ...styles.pin, left: `${12 + (index % 7) * 12}%`, top: `${32 + (index % 3) * 18}%` }}>{index + 1}</span>)}
+      <div style={styles.coveragePanel}>
+        <div style={styles.coverageHeader}>
+          <div>
+            <span style={styles.coverageEyebrow}>Store coverage</span>
+            <strong style={styles.coverageTitle}>Field coverage at a glance</strong>
+          </div>
+          <span style={styles.coverageCount}>{loading ? '…' : filteredStores.length}</span>
+        </div>
+        <div style={styles.coverageGrid}>
+          <div style={styles.coverageMetric}><strong>{visitedStores.size}</strong><span>Visited</span></div>
+          <div style={styles.coverageMetric}><strong>{Math.max(0, stores.length - visitedStores.size)}</strong><span>Pending</span></div>
+          <div style={styles.coverageMetric}><strong>{stores.filter((store) => attentionCount(store) > 0).length}</strong><span>Needs attention</span></div>
+        </div>
+        <div style={styles.coverageNote}>
+          Visited means the store has at least one completed visit. Unfinished visits are not counted.
+        </div>
       </div>
 
       <div style={styles.summary}>{loading ? 'Loading stores…' : `${filteredStores.length} stores shown`}</div>
@@ -221,10 +233,14 @@ const styles: Record<string, React.CSSProperties> = {
   syncButton: { border: 0, background: '#171717', color: '#fff', borderRadius: 8, padding: '9px 11px', fontSize: 10, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
   message: { background: '#eef7ee', color: '#315d31', borderRadius: 9, padding: 10, fontSize: 11, marginBottom: 10 },
   error: { background: '#fff3f3', color: '#a40000', borderRadius: 9, padding: 10, fontSize: 11, marginBottom: 10 },
-  mapPlaceholder: { height: 180, borderRadius: 15, border: '1px solid #deded9', background: '#ecece8', position: 'relative', overflow: 'hidden', marginBottom: 12 },
-  mapGrid: { position: 'absolute', inset: 0, opacity: 0.35, backgroundImage: 'linear-gradient(25deg, transparent 47%, #c8c8c2 48%, #c8c8c2 50%, transparent 51%), linear-gradient(155deg, transparent 47%, #c8c8c2 48%, #c8c8c2 50%, transparent 51%)', backgroundSize: '80px 80px' },
-  mapLabel: { position: 'absolute', top: 12, left: 12, background: '#fff', borderRadius: 8, padding: '6px 9px', fontSize: 10, fontWeight: 800 },
-  pin: { position: 'absolute', width: 25, height: 25, borderRadius: '50%', background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 800, transform: 'translate(-50%, -50%)', boxShadow: '0 3px 8px rgba(0,0,0,.18)' },
+  coveragePanel: { background: '#f7f7f4', border: '1px solid #e3e1db', borderRadius: 14, padding: 14, marginBottom: 12 },
+  coverageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  coverageEyebrow: { display: 'block', color: '#888', fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: .7 },
+  coverageTitle: { display: 'block', marginTop: 3, fontSize: 13 },
+  coverageCount: { minWidth: 30, height: 30, borderRadius: 10, background: '#171717', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 900 },
+  coverageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 7, marginTop: 11 },
+  coverageMetric: { background: '#fff', borderRadius: 9, padding: '9px 8px', display: 'grid', gap: 3 },
+  coverageNote: { marginTop: 9, color: '#777', fontSize: 9, lineHeight: 1.35 },
   summary: { color: '#888', fontSize: 11, marginBottom: 9 },
   list: { display: 'grid', gap: 9 },
   card: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 14, padding: 15 },
