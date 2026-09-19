@@ -36,7 +36,14 @@ function visitAge(value: any) {
   return `${days} days ago`;
 }
 
-const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
+const hasChecklistIssues = (visit?: Record<string, any>) =>
+  Boolean(visit?.checklist && Object.values(visit.checklist).some((value) => value === false));
+
+const attentionCount = (store: Store, latestVisits: Record<string, Record<string, any>>) =>
+  Number(store.stockAlerts || 0) +
+  Number(store.expiryAlerts || 0) +
+  (hasChecklistIssues(latestVisits[store.outletId]) ? 1 : 0);
+
 const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
 
 export default function StoresSection({ onStartVisit }: { onStartVisit: (store: Store) => void }) {
@@ -137,28 +144,30 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
     const normalized = query.trim().toLowerCase();
     return stores.filter((store) => {
       const isVisited = visitedStores.has(store.outletId);
-      const hasAttention = attentionCount(store) > 0;
+      const hasAttention = attentionCount(store, latestVisits) > 0;
       const matchesFilter =
         filter === 'All' ||
         (filter === 'Visited' ? isVisited : filter === 'Pending' ? !isVisited : hasAttention);
       const matchesQuery = !normalized || `${store.branchName} ${store.retailer} ${store.location}`.toLowerCase().includes(normalized);
       return matchesFilter && matchesQuery;
     }).sort((a, b) => {
-      if (sortBy === 'Attention') return attentionCount(b) - attentionCount(a) || priorityRank(b.priority) - priorityRank(a.priority);
+      if (sortBy === 'Attention') return attentionCount(b, latestVisits) - attentionCount(a, latestVisits) || priorityRank(b.priority) - priorityRank(a.priority);
       if (sortBy === 'Recent') {
         const getTime = (store: Store) => latestVisits[store.outletId]?.createdAt?.toDate?.()?.getTime?.() || latestVisits[store.outletId]?.startedAt?.toDate?.()?.getTime?.() || 0;
         return getTime(b) - getTime(a);
       }
       if (sortBy === 'Pending first') return Number(visitedStores.has(a.outletId)) - Number(visitedStores.has(b.outletId)) || priorityRank(b.priority) - priorityRank(a.priority);
-      return priorityRank(b.priority) - priorityRank(a.priority) || attentionCount(b) - attentionCount(a);
+      return priorityRank(b.priority) - priorityRank(a.priority) || attentionCount(b, latestVisits) - attentionCount(a, latestVisits);
     });
   }, [filter, query, sortBy, stores, visitedStores, latestVisits]);
+
+  const attentionStoresCount = stores.filter((store) => attentionCount(store, latestVisits) > 0).length;
 
   return (
     <section>
       <div style={styles.toolbar}>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search stores..." aria-label="Search stores" style={styles.search} />
-        <div style={styles.filters}>{(['All', 'Visited', 'Pending', 'Attention'] as const).map((item) => { const count = item === 'All' ? stores.length : item === 'Visited' ? visitedStores.size : item === 'Pending' ? Math.max(0, stores.length - visitedStores.size) : stores.filter((store) => attentionCount(store) > 0).length; return <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item} <span style={styles.filterCount}>{loading ? '…' : count}</span></button>; })}</div>
+        <div style={styles.filters}>{(['All', 'Visited', 'Pending', 'Attention'] as const).map((item) => { const count = item === 'All' ? stores.length : item === 'Visited' ? visitedStores.size : item === 'Pending' ? Math.max(0, stores.length - visitedStores.size) : attentionStoresCount; return <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item} <span style={styles.filterCount}>{loading ? '…' : count}</span></button>; })}</div>
       </div>
 
       <div style={styles.sortBar}>
@@ -187,7 +196,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
         <div style={styles.coverageGrid}>
           <div style={styles.coverageMetric}><strong>{visitedStores.size}</strong><span>Visited</span></div>
           <div style={styles.coverageMetric}><strong>{Math.max(0, stores.length - visitedStores.size)}</strong><span>Pending</span></div>
-          <div style={styles.coverageMetric}><strong>{stores.filter((store) => attentionCount(store) > 0).length}</strong><span>Needs attention</span></div>
+          <div style={styles.coverageMetric}><strong>{attentionStoresCount}</strong><span>Needs attention</span></div>
         </div>
         <div style={styles.coverageNote}>Visited means the store has at least one completed visit. Unfinished visits are not counted.</div>
       </div>
@@ -201,7 +210,8 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
           const hasStockAlert = Number(store.stockAlerts || 0) > 0;
           const hasExpiry = Number(store.expiryAlerts || 0) > 0;
           const visitType = latest?.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal';
-          const attention = attentionCount(store);
+          const attention = attentionCount(store, latestVisits);
+          const hasVisitIssues = hasChecklistIssues(latest);
 
           return (
             <article key={store.outletId} style={{ ...styles.card, ...(attention > 0 ? styles.cardAttention : {}) }}>
@@ -220,7 +230,8 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
               <div style={styles.attentionRow}>
                 {hasStockAlert && <span style={styles.alertBadge}>Low stock · {store.stockAlerts}</span>}
                 {hasExpiry && <span style={styles.expiryBadge}>Expiry present</span>}
-                {!hasStockAlert && !hasExpiry && <span style={styles.clearBadge}>No immediate alerts</span>}
+                {hasVisitIssues && <span style={styles.checklistBadge}>Visit issues · {Object.values(latest?.checklist || {}).filter((value) => value === false).length}</span>}
+                {!hasStockAlert && !hasExpiry && !hasVisitIssues && <span style={styles.clearBadge}>No immediate alerts</span>}
               </div>
 
               <div style={styles.lastVisit}>
@@ -290,6 +301,7 @@ const styles: Record<string, React.CSSProperties> = {
   attentionRow: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 },
   alertBadge: { background: '#fff1f2', color: '#991b1b', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
   expiryBadge: { background: '#fff7ed', color: '#9a3412', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
+  checklistBadge: { background: '#fef3c7', color: '#92400e', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
   clearBadge: { background: '#f3f4f6', color: '#6b7280', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 700 },
   followUpBadge: { background: '#fff7ed', color: '#9a3412', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 900, whiteSpace: 'nowrap' },
   lastVisit: { display: 'flex', alignItems: 'center', gap: 7, marginTop: 13, paddingTop: 11, borderTop: '1px solid #f0efec', flexWrap: 'wrap' },
