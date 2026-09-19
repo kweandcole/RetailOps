@@ -158,7 +158,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
     <section>
       <div style={styles.toolbar}>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search stores..." aria-label="Search stores" style={styles.search} />
-        <div style={styles.filters}>{(['All', 'Visited', 'Pending', 'Attention'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item}</button>)}</div>
+        <div style={styles.filters}>{(['All', 'Visited', 'Pending', 'Attention'] as const).map((item) => { const count = item === 'All' ? stores.length : item === 'Visited' ? visitedStores.size : item === 'Pending' ? Math.max(0, stores.length - visitedStores.size) : stores.filter((store) => attentionCount(store) > 0).length; return <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item} <span style={styles.filterCount}>{loading ? '…' : count}</span></button>; })}</div>
       </div>
 
       <div style={styles.sortBar}>
@@ -263,6 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
   filters: { display: 'flex', gap: 7, overflowX: 'auto' },
   filter: { border: '1px solid #ddd', background: '#fff', color: '#666', borderRadius: 20, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' },
   filterActive: { background: '#171717', color: '#fff', borderColor: '#171717' },
+  filterCount: { opacity: 0.72, marginLeft: 3 },
   sortBar: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, marginBottom: 9 },
   sortLabel: { color: '#888', fontSize: 9, fontWeight: 700 },
   sortSelect: { border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '7px 9px', fontSize: 10, color: '#444' },
