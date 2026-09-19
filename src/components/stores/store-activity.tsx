@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase/client';
 import VisitEvidenceSummary from '@/components/visits/visit-evidence-summary';
+import StoreOrders from './store-orders';
 
 type StoreActivityProps = { outletId: string; retailer: string; branchName: string };
 
@@ -77,6 +78,10 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
         <strong>{formatDate(latestVisit.createdAt || latestVisit.startedAt)}</strong>
         <span>{latestVisit.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · {latestVisit.status || '—'} · {latestVisit.repName || 'Field rep'}</span>
       </div>}
+      <div style={styles.section}>
+        <span style={styles.eyebrow}>Order history</span>
+        <StoreOrders orders={orders} />
+      </div>
       <div style={styles.section}>
         <span style={styles.eyebrow}>Current stock</span>
         {stock.length === 0 ? <p style={styles.muted}>No stock records yet.</p> : <div style={styles.list}>{stock.map((item) => <div key={item.id} style={styles.row}><span>{item.productName || item.sku}</span><strong>{Number(item.shelfStock || 0) + Number(item.backStock || 0)} bottles</strong></div>)}</div>}
