@@ -855,17 +855,22 @@ function formatDuration(totalSeconds: number) {
 }
 
 function StockLanding() {
-  const [rows, setRows] = useState<Array<{ id: string; outletId: string; outletName: string; sku: string; productName: string; quantity: number; updatedAt?: { toDate?: () => Date } }>>([]);
+  type StockRow = { id: string; outletId: string; outletName: string; sku: string; productName: string; quantity: number; updatedAt?: { toDate?: () => Date } };
+  type ExpiryRow = { id: string; outletId: string; outletName: string; sku: string; productName: string; quantity: number; expiryDate: string; repName: string; visitId: string; };
+  const [view, setView] = useState<'STOCK' | 'EXPIRY'>('STOCK');
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [expiryRows, setExpiryRows] = useState<ExpiryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'OOS' | 'LOW'>('ALL');
+  const [expiryFilter, setExpiryFilter] = useState<'ALL' | 'EXPIRED' | '30D' | 'LATER'>('ALL');
 
   async function loadStock() {
     setLoading(true);
     try {
       const snapshot = await getDocs(collection(getFirebaseDb(), 'stock'));
       const loaded = snapshot.docs.map((item) => {
-        const data = item.data() as Partial<(typeof rows)[number]>;
+        const data = item.data() as Partial<StockRow>;
         return {
           id: item.id,
           outletId: data.outletId || '',
@@ -878,14 +883,39 @@ function StockLanding() {
       });
       loaded.sort((a, b) => a.outletName.localeCompare(b.outletName) || a.productName.localeCompare(b.productName));
       setRows(loaded);
-    } catch {
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setRows([]); }
   }
 
-  useEffect(() => { void loadStock(); }, []);
+  async function loadExpiry() {
+    setLoading(true);
+    try {
+      const snapshot = await getDocs(collection(getFirebaseDb(), 'visits'));
+      const loaded: ExpiryRow[] = [];
+      snapshot.docs.forEach((visitDoc) => {
+        const data = visitDoc.data() as Record<string, any>;
+        const expiry = Array.isArray(data.expiry) ? data.expiry : [];
+        expiry.forEach((item: any, index: number) => {
+          if (item?.hasExpiryConcern !== true || !item?.expiryDate) return;
+          loaded.push({
+            id: `${visitDoc.id}-${item.sku || index}`,
+            outletId: data.outletId || '',
+            outletName: data.outletName || 'Unnamed store',
+            sku: item.sku || '',
+            productName: item.productName || item.sku || 'Unknown product',
+            quantity: Number(item.quantity || 0),
+            expiryDate: String(item.expiryDate),
+            repName: data.repName || 'Field rep',
+            visitId: visitDoc.id,
+          });
+        });
+      });
+      loaded.sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+      setExpiryRows(loaded);
+    } catch { setExpiryRows([]); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { void loadStock(); void loadExpiry(); }, []);
 
   const filtered = rows.filter((row) => {
     const haystack = `${row.outletName} ${row.productName} ${row.sku}`.toLowerCase();
@@ -894,44 +924,101 @@ function StockLanding() {
     return matchesSearch && matchesFilter;
   });
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const in30 = new Date(today);
+  in30.setDate(in30.getDate() + 30);
+  const expiryDateValue = (row: ExpiryRow) => {
+    const date = new Date(`${row.expiryDate}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+  const expiryFiltered = expiryRows.filter((row) => {
+    const haystack = `${row.outletName} ${row.productName} ${row.sku}`.toLowerCase();
+    if (!haystack.includes(search.toLowerCase())) return false;
+    const date = expiryDateValue(row);
+    if (!date) return false;
+    if (expiryFilter === 'EXPIRED') return date < today;
+    if (expiryFilter === '30D') return date >= today && date <= in30;
+    if (expiryFilter === 'LATER') return date > in30;
+    return true;
+  });
   const oosCount = rows.filter((row) => row.quantity === 0).length;
   const lowCount = rows.filter((row) => row.quantity > 0 && row.quantity <= 5).length;
+  const expiredCount = expiryRows.filter((row) => { const d = expiryDateValue(row); return d ? d < today : false; }).length;
+  const due30Count = expiryRows.filter((row) => { const d = expiryDateValue(row); return d ? d >= today && d <= in30 : false; }).length;
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
       <div>
-        <h2 style={styles.sectionTitle}>Stock overview</h2>
-        <p style={styles.sectionSubtitle}>Latest recorded stock by store and SKU. Low stock means 5 bottles or fewer.</p>
+        <h2 style={styles.sectionTitle}>{view === 'STOCK' ? 'Stock overview' : 'Expiry overview'}</h2>
+        <p style={styles.sectionSubtitle}>{view === 'STOCK' ? 'Latest recorded stock by store and SKU. Low stock means 5 bottles or fewer.' : 'Expiry concerns recorded during visits, grouped by urgency.'}</p>
       </div>
-      <button onClick={() => void loadStock()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
+      <button onClick={() => { if (view === 'STOCK') void loadStock(); else void loadExpiry(); }} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
     </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 14 }}>
-      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Stock records</div><div style={styles.kpiValue}>{rows.length}</div></div>
-      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Out of stock</div><div style={styles.kpiValue}>{oosCount}</div></div>
-      <div style={styles.kpiCard}><div style={styles.kpiLabel}>Low stock</div><div style={styles.kpiValue}>{lowCount}</div></div>
+
+    <div style={{ display: 'flex', gap: 7, marginBottom: 14, flexWrap: 'wrap' }}>
+      <button onClick={() => { setView('STOCK'); setSearch(''); }} style={view === 'STOCK' ? styles.darkButton : styles.secondaryButton}>Stock</button>
+      <button onClick={() => { setView('EXPIRY'); setSearch(''); }} style={view === 'EXPIRY' ? styles.darkButton : styles.secondaryButton}>Expiry</button>
     </div>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 14 }}>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or sauce…" style={styles.input} />
-      <div style={{ display: 'flex', gap: 7 }}>
-        {(['ALL', 'OOS', 'LOW'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={filter === item ? styles.darkButton : styles.secondaryButton}>{item === 'ALL' ? 'All' : item === 'OOS' ? 'Out of stock' : 'Low stock'}</button>)}
+
+    {view === 'STOCK' ? <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 14 }}>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Stock records</div><div style={styles.kpiValue}>{rows.length}</div></div>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Out of stock</div><div style={styles.kpiValue}>{oosCount}</div></div>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Low stock</div><div style={styles.kpiValue}>{lowCount}</div></div>
       </div>
-    </div>
-    {loading && rows.length === 0 ? <div style={styles.emptyState}><strong>Loading stock…</strong></div> :
-      filtered.length === 0 ? <div style={styles.emptyState}><strong>No stock records found</strong><span>Stock will appear here after a stock count or completed sampling session.</span></div> :
-      <div style={styles.visitList}>{filtered.map((row) => {
-        const updated = row.updatedAt?.toDate?.();
-        const status = row.quantity === 0 ? 'OUT' : row.quantity <= 5 ? 'LOW' : 'OK';
-        return <article key={row.id} style={styles.visitRow}>
-          <div style={{ minWidth: 0 }}>
-            <strong style={styles.visitStore}>{row.outletName}</strong>
-            <div style={styles.visitMeta}>{row.productName} · {row.sku}{updated ? ` · Updated ${updated.toLocaleString()}` : ''}</div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <strong style={{ fontSize: 18 }}>{row.quantity}</strong>
-            <div style={styles.statusPill}>{status}</div>
-          </div>
-        </article>;
-      })}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 14 }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or sauce…" style={styles.input} />
+        <div style={{ display: 'flex', gap: 7 }}>
+          {(['ALL', 'OOS', 'LOW'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={filter === item ? styles.darkButton : styles.secondaryButton}>{item === 'ALL' ? 'All' : item === 'OOS' ? 'Out of stock' : 'Low stock'}</button>)}
+        </div>
+      </div>
+      {loading && rows.length === 0 ? <div style={styles.emptyState}><strong>Loading stock…</strong></div> :
+        filtered.length === 0 ? <div style={styles.emptyState}><strong>No stock records found</strong><span>Stock will appear here after a stock count or completed sampling session.</span></div> :
+        <div style={styles.visitList}>{filtered.map((row) => {
+          const updated = row.updatedAt?.toDate?.();
+          const status = row.quantity === 0 ? 'OUT' : row.quantity <= 5 ? 'LOW' : 'OK';
+          return <article key={row.id} style={styles.visitRow}>
+            <div style={{ minWidth: 0 }}>
+              <strong style={styles.visitStore}>{row.outletName}</strong>
+              <div style={styles.visitMeta}>{row.productName} · {row.sku}{updated ? ` · Updated ${updated.toLocaleString()}` : ''}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <strong style={{ fontSize: 18 }}>{row.quantity}</strong>
+              <div style={styles.statusPill}>{status}</div>
+            </div>
+          </article>;
+        })}</div>}
+    </> : <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 14 }}>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Expiry concerns</div><div style={styles.kpiValue}>{expiryRows.length}</div></div>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Expired</div><div style={styles.kpiValue}>{expiredCount}</div></div>
+        <div style={styles.kpiCard}><div style={styles.kpiLabel}>Due within 30 days</div><div style={styles.kpiValue}>{due30Count}</div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, marginBottom: 14 }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or sauce…" style={styles.input} />
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          {(['ALL', 'EXPIRED', '30D', 'LATER'] as const).map((item) => <button key={item} onClick={() => setExpiryFilter(item)} style={expiryFilter === item ? styles.darkButton : styles.secondaryButton}>{item === 'ALL' ? 'All' : item === 'EXPIRED' ? 'Expired' : item === '30D' ? 'Next 30 days' : 'Later'}</button>)}
+        </div>
+      </div>
+      {loading && expiryRows.length === 0 ? <div style={styles.emptyState}><strong>Loading expiry…</strong></div> :
+        expiryFiltered.length === 0 ? <div style={styles.emptyState}><strong>No expiry concerns found</strong><span>Expiry concerns recorded during store visits will appear here.</span></div> :
+        <div style={styles.visitList}>{expiryFiltered.map((row) => {
+          const date = expiryDateValue(row);
+          const expired = date ? date < today : false;
+          const days = date ? Math.ceil((date.getTime() - today.getTime()) / 86400000) : null;
+          return <article key={row.id} style={styles.visitRow}>
+            <div style={{ minWidth: 0 }}>
+              <strong style={styles.visitStore}>{row.outletName}</strong>
+              <div style={styles.visitMeta}>{row.productName} · {row.quantity} bottles · {row.repName}</div>
+              <div style={styles.visitMeta}>Expiry: {date ? date.toLocaleDateString() : row.expiryDate}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ ...styles.statusPill, ...(expired ? { background: '#171717', color: '#fff' } : {}) }}>{expired ? 'EXPIRED' : days === 0 ? 'TODAY' : `${days}d`}</div>
+            </div>
+          </article>;
+        })}</div>}
+    </>}
   </section>;
 }
 
