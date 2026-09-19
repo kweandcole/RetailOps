@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSpreadsheetMetadata } from '@/src/sheets/google-sheets';
+import { getSpreadsheetMetadata } from '@/sheets/google-sheets';
 
 export const runtime = 'nodejs';
 
