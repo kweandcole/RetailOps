@@ -124,11 +124,11 @@ export default function HomePage() {
     try {
       const snapshot = await getDocs(query(
         collection(getFirebaseDb(), 'visits'),
-        where('repUid', '==', user.uid),
-        where('status', '==', 'STARTED')
+        where('repUid', '==', user.uid)
       ));
       const loaded = snapshot.docs
         .map((d) => ({ id: d.id, data: d.data() as Record<string, any> }))
+        .filter((item) => item.data.status === 'STARTED')
         .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
       setIncompleteVisits(loaded);
     } catch {
