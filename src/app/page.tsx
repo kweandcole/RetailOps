@@ -738,7 +738,7 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
         const quantity = Number((d.data() as Record<string, any>).quantity || 0);
         return sum + (quantity <= 5 ? 1 : 0);
       }, 0);
-      const orders = orderSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+      const orders: Array<Record<string, any>> = orderSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
       const todayOrders = orders.filter((item) => {
         const date = item.createdAt?.toDate?.();
         return date instanceof Date && date >= today && date < tomorrow;
