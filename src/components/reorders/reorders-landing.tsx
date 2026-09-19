@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase/client';
 
 type ReorderRow = {
@@ -19,6 +19,9 @@ export default function ReordersLanding() {
   const [rows, setRows] = useState<ReorderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
 
   async function load() {
     setLoading(true);
@@ -52,6 +55,37 @@ export default function ReordersLanding() {
   const oos = rows.filter((row) => row.quantity === 0).length;
   const low = rows.filter((row) => row.quantity > 0).length;
 
+  function toggleRow(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function createReorder() {
+    const selectedRows = rows.filter((row) => selected.has(row.id));
+    if (!selectedRows.length) return;
+    setSaving(true); setMessage('');
+    try {
+      const db = getFirebaseDb();
+      const totalUnits = selectedRows.reduce((sum, row) => sum + Math.max(TARGET_STOCK - row.quantity, 0), 0);
+      const ref = await addDoc(collection(db, 'reorders'), {
+        outletCount: new Set(selectedRows.map((row) => row.outletId)).size,
+        itemCount: selectedRows.length,
+        totalUnits,
+        status: 'DRAFT',
+        createdAt: serverTimestamp(),
+        items: selectedRows.map((row) => ({ outletId: row.outletId, outletName: row.outletName, sku: row.sku, productName: row.productName, currentStock: row.quantity, quantity: Math.max(TARGET_STOCK - row.quantity, 0) })),
+      });
+      setSelected(new Set());
+      setMessage('Reorder draft created successfully.');
+      console.info('Reorder draft', ref.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create reorder draft.');
+    } finally { setSaving(false); }
+  }
+
   return <section style={styles.sectionCard}>
     <div style={styles.header}>
       <div>
@@ -67,13 +101,13 @@ export default function ReordersLanding() {
       <div style={styles.metric}><span>Items to review</span><strong>{rows.length}</strong></div>
     </div>
 
-    <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or product" style={styles.search} />
+    <div style={styles.toolbar}><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search store or product" style={styles.search} /><button disabled={!selected.size || saving} onClick={() => void createReorder()} style={{ ...styles.createButton, opacity: selected.size && !saving ? 1 : .45 }}>{saving ? "Creating…" : `Create reorder (${selected.size})`}</button></div>{message && <div style={styles.message}>{message}</div>}
 
     {filtered.length === 0
       ? <div style={styles.empty}>{loading ? 'Loading reorder recommendations…' : 'No reorder items currently flagged.'}</div>
       : <div style={styles.list}>{filtered.map((row) => {
           const suggested = Math.max(TARGET_STOCK - row.quantity, 0);
-          return <article key={row.id} style={styles.row}>
+          return <article key={row.id} style={{ ...styles.row, ...(selected.has(row.id) ? styles.rowSelected : {}) }}><label style={styles.check}><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} /></label>
             <div style={styles.rowMain}>
               <strong>{row.outletName}</strong>
               <span>{row.productName}</span>
@@ -96,10 +130,15 @@ const styles: Record<string, React.CSSProperties> = {
   button: { border: '1px solid #ddd', background: '#fff', borderRadius: 7, padding: '8px 11px', fontWeight: 700 },
   metrics: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 },
   metric: { padding: 10, background: '#f7f7f4', borderRadius: 8, display: 'grid', gap: 3, fontSize: 10 },
-  search: { width: '100%', boxSizing: 'border-box', padding: 10, border: '1px solid #ddd', borderRadius: 8, marginBottom: 10 },
+  toolbar: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 },
+  search: { flex: 1, boxSizing: 'border-box', padding: 10, border: '1px solid #ddd', borderRadius: 8 },
+  createButton: { border: '0', background: '#171717', color: '#fff', borderRadius: 7, padding: '10px 12px', fontWeight: 800, whiteSpace: 'nowrap' },
+  message: { marginBottom: 10, padding: 9, borderRadius: 7, background: '#f7f7f4', fontSize: 10 },
   list: { display: 'grid', gap: 7 },
   row: { display: 'flex', justifyContent: 'space-between', gap: 12, padding: 10, border: '1px solid #e8e6e0', borderRadius: 8 },
-  rowMain: { display: 'grid', gap: 3, minWidth: 0 },
+  rowSelected: { borderColor: '#171717', background: '#fafafa' },
+  check: { display: 'flex', alignItems: 'flex-start', paddingTop: 2 },
+  rowMain: { display: 'grid', gap: 3, minWidth: 0, flex: 1 },
   rowRight: { display: 'grid', gap: 3, textAlign: 'right', fontSize: 10, whiteSpace: 'nowrap' },
   low: { fontSize: 8, fontWeight: 900, letterSpacing: .4 },
   oos: { fontSize: 8, fontWeight: 900, letterSpacing: .4 },
