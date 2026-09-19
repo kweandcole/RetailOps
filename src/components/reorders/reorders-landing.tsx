@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { addDoc, collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase/client';
 
-type Reorder = { id: string; status: string; createdAt?: any; outletCount: number; itemCount: number; totalUnits: number; items: Array<{ outletId: string; outletName: string; sku: string; productName: string; currentStock: number; quantity: number }>; };\n\ntype ReorderRow = {
+type Reorder = { id: string; status: string; createdAt?: any; outletCount: number; itemCount: number; totalUnits: number; items: Array<{ outletId: string; outletName: string; sku: string; productName: string; currentStock: number; quantity: number }>; };
+
+type ReorderRow = {
   id: string;
   outletId: string;
   outletName: string;
