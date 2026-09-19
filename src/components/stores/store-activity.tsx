@@ -40,8 +40,8 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
 
       if (visitSnap) {
         const loadedVisits: Array<Record<string, any>> = visitSnap.docs
-          .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
-          .filter((visit) => visit.status === 'COMPLETED' || visit.status === 'DELETED');
+          .filter((d) => (d.data() as Record<string, any>).status === 'COMPLETED')
+          .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
         loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || b.startedAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || a.startedAt?.toDate?.()?.getTime?.() || 0));
         setVisits(loadedVisits);
       }
