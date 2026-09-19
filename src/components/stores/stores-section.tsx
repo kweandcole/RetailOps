@@ -171,7 +171,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                   <h2 style={styles.branch}>{store.branchName}</h2>
                   <div style={styles.location}>{store.location}</div>
                 </div>
-                <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}{isVisited ? 'Visited' : 'Pending'}</span>
+                <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}>{isVisited ? 'Visited' : 'Pending'}</span>
               </div>
 
               <div style={styles.attentionRow}>
