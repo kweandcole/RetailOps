@@ -192,13 +192,17 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                 {!hasStockAlert && !hasExpiry && <span style={styles.clearBadge}>No immediate alerts</span>}
               </div>
 
-              {latest && (
-                <div style={styles.lastVisit}>
-                  <span style={styles.lastVisitLabel}>Last visit</span>
-                  <span style={styles.lastVisitDate}>{formatDate(latest.createdAt || latest.startedAt)}</span>
-                  <span style={styles.visitType}>{visitType}</span>
-                </div>
-              )}
+              <div style={styles.lastVisit}>
+                <span style={styles.lastVisitLabel}>{latest ? 'Last visit' : 'Visit history'}</span>
+                {latest ? (
+                  <>
+                    <span style={styles.lastVisitDate}>{formatDate(latest.createdAt || latest.startedAt)}</span>
+                    <span style={styles.visitType}>{visitType}</span>
+                  </>
+                ) : (
+                  <span style={styles.neverVisited}>Never visited</span>
+                )}
+              </div>
 
               <div style={styles.cardBottom}>
                 <div style={styles.cardMeta}>
@@ -254,6 +258,7 @@ const styles: Record<string, React.CSSProperties> = {
   lastVisitLabel: { color: '#888', fontSize: 9, fontWeight: 700 },
   lastVisitDate: { color: '#333', fontSize: 10, fontWeight: 800 },
   visitType: { color: '#777', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
+  neverVisited: { color: '#9a3412', fontSize: 9, fontWeight: 800 },
   cardTop: { display: 'flex', justifyContent: 'space-between', gap: 12 },
   retailer: { color: '#888', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8 },
   branch: { margin: '4px 0 3px', fontSize: 17, letterSpacing: -0.3, lineHeight: 1.15 },
