@@ -38,6 +38,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [visitedStores, setVisitedStores] = useState<Set<string>>(new Set());
   const [latestVisits, setLatestVisits] = useState<Record<string, Record<string, any>>>({});
+  const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
 
   async function loadStores() {
     setLoading(true); setError('');
@@ -70,6 +71,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       const data = snapshot.docs.map((item) => ({ outletId: item.id, ...(item.data() as Omit<Store, 'outletId'>) }));
       const visited = new Set<string>();
       const latest: Record<string, Record<string, any>> = {};
+      const counts: Record<string, number> = {};
 
       visitSnapshot.docs.forEach((item) => {
         const visit = item.data() as Record<string, any>;
@@ -77,6 +79,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
         if (!visit.outletId || !(timestamp instanceof Date) || visit.status !== 'COMPLETED') return;
         const outletId = String(visit.outletId);
         visited.add(outletId);
+        counts[outletId] = (counts[outletId] || 0) + 1;
         const existing = latest[outletId];
         const existingTime = existing?.createdAt?.toDate?.() || existing?.startedAt?.toDate?.();
         if (!existing || timestamp.getTime() > (existingTime instanceof Date ? existingTime.getTime() : 0)) {
@@ -86,6 +89,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
 
       setVisitedStores(visited);
       setLatestVisits(latest);
+      setVisitCounts(counts);
       setStores(data.map((store) => ({
         ...store,
         stockAlerts: stockByOutlet[store.outletId]?.alerts || 0,
@@ -198,6 +202,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                   <>
                     <span style={styles.lastVisitDate}>{formatDate(latest.createdAt || latest.startedAt)}</span>
                     <span style={styles.visitType}>{visitType}</span>
+                    <span style={styles.visitCount}>{visitCounts[store.outletId] || 0} completed {(visitCounts[store.outletId] || 0) === 1 ? 'visit' : 'visits'}</span>
                   </>
                 ) : (
                   <span style={styles.neverVisited}>Never visited</span>
@@ -258,6 +263,7 @@ const styles: Record<string, React.CSSProperties> = {
   lastVisitLabel: { color: '#888', fontSize: 9, fontWeight: 700 },
   lastVisitDate: { color: '#333', fontSize: 10, fontWeight: 800 },
   visitType: { color: '#777', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
+  visitCount: { color: '#999', fontSize: 9, fontWeight: 600 },
   neverVisited: { color: '#9a3412', fontSize: 9, fontWeight: 800 },
   cardTop: { display: 'flex', justifyContent: 'space-between', gap: 12 },
   retailer: { color: '#888', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8 },
