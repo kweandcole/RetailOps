@@ -136,6 +136,31 @@ export default function HomePage() {
     }
   }
 
+  async function deleteVisit(visitId: string) {
+    const reason = window.prompt('Why are you deleting this visit? (Optional)');
+    if (reason === null) return;
+    if (!window.confirm('Delete this visit? The visit will be hidden from active records but retained as a deleted record for audit purposes.')) return;
+    setSavingVisit(true);
+    setVisitMessage('');
+    try {
+      await updateDoc(doc(getFirebaseDb(), 'visits', visitId), {
+        status: 'DELETED',
+        deletedAt: serverTimestamp(),
+        deletedByUid: user?.uid || '',
+        deletedByName: user?.displayName || user?.email || 'User',
+        deletionReason: reason.trim(),
+        updatedAt: serverTimestamp(),
+      });
+      setIncompleteVisits((current) => current.filter((item) => item.id !== visitId));
+      setVisitMessage('Visit deleted. It remains retained as a deleted record for audit purposes.');
+      await loadIncompleteVisits();
+    } catch (err) {
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to delete visit.');
+    } finally {
+      setSavingVisit(false);
+    }
+  }
+
   async function resumeStandardVisit(session: { id: string; data: Record<string, any> }) {
     const data = session.data;
     const startedAt = data.startedAt?.toDate?.();
@@ -825,8 +850,8 @@ export default function HomePage() {
             <button onClick={() => session.data.visitType === 'SAMPLING_ONLY' ? void resumeSamplingSession(session) : void resumeStandardVisit(session)} style={styles.darkButton}>Resume</button>
           </article>)}</div>
         </section>
-        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />
-      </div> : visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} orderItems={orderItems} setOrderItems={setOrderItems} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
+        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />
+      </div> : visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} orderItems={orderItems} setOrderItems={setOrderItems} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && activeNav !== 'Stock' && activeNav !== 'Orders' && activeNav !== 'Reorders' && <PlaceholderSection title={activeNav} />}
       {visitOpen && activeNav === 'Visits' && activeVisitId && <VisitEvidence user={user} activeVisitId={activeVisitId} />}
     </main>
@@ -1028,11 +1053,11 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
   </section>;
 }
 
-function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => void; onNewSamplingVisit: () => void }) {
+function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNewVisit: () => void; onNewSamplingVisit: () => void; onDeleteVisit: (visitId: string) => Promise<void> }) {
   const [visits, setVisits] = useState<Array<Record<string, any>>>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVisit, setSelectedVisit] = useState<any | null>(null);
-  const [visitFilter, setVisitFilter] = useState<'ALL' | 'STANDARD' | 'SAMPLING_ONLY'>('ALL');
+  const [visitFilter, setVisitFilter] = useState<'ALL' | 'STANDARD' | 'SAMPLING_ONLY' | 'DELETED'>('ALL');
 
   async function loadVisits() {
     setLoading(true);
@@ -1044,7 +1069,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
         const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
         return bTime - aTime;
       });
-      setVisits(loaded.slice(0, 25));
+      setVisits(loaded.filter((item) => item.status !== 'DELETED').slice(0, 25));
     } catch {
       setVisits([]);
     } finally {
@@ -1066,9 +1091,9 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
       </div>
     </div>
     <div style={styles.visitFilters}>
-      {(['ALL', 'STANDARD', 'SAMPLING_ONLY'] as const).map((filter) => (
+      {(['ALL', 'STANDARD', 'SAMPLING_ONLY', 'DELETED'] as const).map((filter) => (
         <button key={filter} onClick={() => setVisitFilter(filter)} style={visitFilter === filter ? styles.filterActive : styles.filterButton}>
-          {filter === 'ALL' ? 'All visits' : filter === 'STANDARD' ? 'Normal visits' : 'Sampling'}
+          {filter === 'ALL' ? 'All visits' : filter === 'STANDARD' ? 'Normal visits' : filter === 'SAMPLING_ONLY' ? 'Sampling' : 'Deleted'}
         </button>
       ))}
     </div>
@@ -1081,8 +1106,11 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit }: { onNewVisit: () => v
             <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? styles.samplingBadge : styles.standardBadge}>{(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL VISIT'}</span></div>
             <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}</div>
             <VisitEvidenceSummary visitId={item.id} />
-          <button onClick={(e) => { e.stopPropagation(); setSelectedVisit(selectedVisit?.id === item.id ? null : item); }} style={styles.smallButton}>{selectedVisit?.id === item.id ? 'Hide details' : 'View details →'}</button>
-          {selectedVisit?.id === item.id && <VisitDetail visit={item} />}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              <button onClick={(e) => { e.stopPropagation(); setSelectedVisit(selectedVisit?.id === item.id ? null : item); }} style={styles.smallButton}>{selectedVisit?.id === item.id ? 'Hide details' : 'View details →'}</button>
+              <button onClick={(e) => { e.stopPropagation(); void onDeleteVisit(item.id); }} style={{ ...styles.smallButton, color: '#991b1b', borderColor: '#f0caca' }}>Delete visit</button>
+            </div>
+          {selectedVisit?.id === item.id && <VisitDetail visit={item} onDelete={() => void onDeleteVisit(item.id)} />}
           </div>
           <span style={styles.statusPill}>{item.status || 'STARTED'}</span>
         </article>;
