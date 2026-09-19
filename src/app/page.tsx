@@ -1596,7 +1596,13 @@ function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; o
   useEffect(() => { void onRefresh(); }, []);
 
   const open = orders.filter((o) => (o.status || 'CAPTURED') !== 'FULFILLED');
+  const fulfilled = orders.filter((o) => o.status === 'FULFILLED');
   const value = orders.reduce((sum, o) => sum + (Number(o.totalValue) || 0), 0);
+  const [orderFilter, setOrderFilter] = useState<'ALL' | 'OPEN' | 'FULFILLED'>('ALL');
+  const filteredOrders = orders.filter((order) => {
+    const status = order.status || 'CAPTURED';
+    return orderFilter === 'ALL' || (orderFilter === 'OPEN' ? status !== 'FULFILLED' : status === 'FULFILLED');
+  });
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
@@ -1606,10 +1612,18 @@ function OrdersLanding({ orders, onRefresh }: { orders: Record<string, any>[]; o
     <div style={styles.kpiGrid}>
       <div style={styles.kpiCard}><span style={styles.kpiLabel}>Orders captured</span><strong style={styles.kpiValue}>{orders.length}</strong></div>
       <div style={styles.kpiCard}><span style={styles.kpiLabel}>Open orders</span><strong style={styles.kpiValue}>{open.length}</strong></div>
+      <div style={styles.kpiCard}><span style={styles.kpiLabel}>Fulfilled</span><strong style={styles.kpiValue}>{fulfilled.length}</strong></div>
       <div style={styles.kpiCard}><span style={styles.kpiLabel}>Recorded value</span><strong style={styles.kpiValue}>KSh {value.toLocaleString()}</strong></div>
     </div>
+    <div style={styles.visitFilters}>
+      {(['ALL', 'OPEN', 'FULFILLED'] as const).map((filter) => (
+        <button key={filter} onClick={() => setOrderFilter(filter)} style={orderFilter === filter ? styles.filterActive : styles.filterButton}>
+          {filter === 'ALL' ? 'All orders' : filter === 'OPEN' ? 'Open orders' : 'Fulfilled'}
+        </button>
+      ))}
+    </div>
     {orders.length === 0 ? <div style={styles.emptyState}><span>No orders captured yet.</span><span style={styles.muted}>Orders recorded as “Yes” in completed visits will appear here.</span></div> :
-      <div style={styles.visitList}>{orders.map((order) => <article key={order.id + order.source} style={styles.visitRow} onClick={() => setSelected(order)}>
+      <div style={styles.visitList}>{filteredOrders.map((order) => <article key={order.id + order.source} style={styles.visitRow} onClick={() => setSelected(order)}>
         <div style={{ minWidth: 0 }}>
           <strong style={styles.visitStore}>{order.outletName || 'Store order'}</strong>
           <div style={styles.visitMeta}>{order.orderNumber || order.id.slice(0, 8)} · {order.status || 'CAPTURED'} · {order.totalValue ? `KSh ${Number(order.totalValue).toLocaleString()}` : 'Value not recorded'}</div>
