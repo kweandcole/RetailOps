@@ -39,7 +39,9 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
       const expirySnap = expiryResult.status === 'fulfilled' ? expiryResult.value : null;
 
       if (visitSnap) {
-        const loadedVisits: Array<Record<string, any>> = visitSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+        const loadedVisits: Array<Record<string, any>> = visitSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }))
+          .filter((visit) => visit.status === 'COMPLETED' || visit.status === 'DELETED');
         loadedVisits.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || b.startedAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || a.startedAt?.toDate?.()?.getTime?.() || 0));
         setVisits(loadedVisits);
       }
