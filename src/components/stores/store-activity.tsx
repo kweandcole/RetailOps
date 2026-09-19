@@ -15,6 +15,14 @@ const SKU_NAMES: Record<string, string> = {
   'SKU-004': 'Mango Pineapple Habanero Hot Sauce',
 };
 
+const CHECKLIST_NAMES: Record<string, string> = {
+  displayPresent: 'Display present',
+  productsWellDisplayed: 'Products well displayed',
+  priceVisible: 'Price visible',
+  staffEngaged: 'Staff engaged',
+  competitorActivity: 'Competitor activity observed',
+};
+
 export default function StoreActivity({ outletId, retailer, branchName, onStartVisit }: StoreActivityProps) {
   const [visits, setVisits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -65,7 +73,12 @@ export default function StoreActivity({ outletId, retailer, branchName, onStartV
 
   const lowStockItems = stock.filter((item) => Number(item.quantity ?? Number(item.shelfStock || 0) + Number(item.backStock || 0)) <= 5);
   const expiryConcernItems = expiry.filter((item) => item.hasExpiryConcern);
-  const attentionCount = lowStockItems.length + expiryConcernItems.length;
+  const checklistIssues = latestVisit?.checklist
+    ? Object.entries(latestVisit.checklist)
+        .filter(([, value]) => value === false)
+        .map(([key]) => ({ key, label: CHECKLIST_NAMES[key] || key, reason: latestVisit.checklistReasons?.[key] || 'No reason recorded' }))
+    : [];
+  const attentionCount = lowStockItems.length + expiryConcernItems.length + checklistIssues.length;
 
   return (
     <div style={styles.panel}>
@@ -83,11 +96,13 @@ export default function StoreActivity({ outletId, retailer, branchName, onStartV
           <div style={styles.attentionItems}>
             {lowStockItems.length > 0 && <span style={styles.stockAttention}>Low stock · {lowStockItems.length}</span>}
             {expiryConcernItems.length > 0 && <span style={styles.expiryAttention}>Expiry · {expiryConcernItems.length}</span>}
+            {checklistIssues.length > 0 && <span style={styles.checklistAttention}>Visit issues · {checklistIssues.length}</span>}
             {onStartVisit && <button type="button" onClick={onStartVisit} style={styles.followUpButton}>Start follow-up visit</button>}
           </div>
+          {checklistIssues.length > 0 && <div style={styles.issueList}>{checklistIssues.map((issue) => <div key={issue.key} style={styles.issueRow}><strong>{issue.label}</strong><span>{issue.reason}</span></div>)}</div>}
         </div>
       ) : (
-        <div style={styles.clearPanel}>No current stock or expiry issues.</div>
+        <div style={styles.clearPanel}>No current stock, expiry or visit issues.</div>
       )}
 
       <div style={styles.metrics}>
@@ -150,7 +165,10 @@ const styles: Record<string, React.CSSProperties> = {
   attentionItems: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   stockAttention: { background: '#fff1f2', color: '#991b1b', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
   expiryAttention: { background: '#ffedd5', color: '#9a3412', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
+  checklistAttention: { background: '#fef3c7', color: '#92400e', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
   followUpButton: { border: 0, background: '#9a3412', color: '#fff', borderRadius: 7, padding: '6px 8px', fontSize: 8, fontWeight: 800, cursor: 'pointer' },
+  issueList: { display: 'grid', gap: 5, marginTop: 2 },
+  issueRow: { display: 'grid', gap: 2, padding: '7px 8px', background: '#fff', borderRadius: 7, fontSize: 9 },
   clearPanel: { marginTop: 10, padding: 9, background: '#f3f4f6', borderRadius: 9, color: '#666', fontSize: 9, fontWeight: 700 },
   metrics: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 },
   metric: { background: '#fff', borderRadius: 8, padding: 8, display: 'grid', gap: 3, minWidth: 0 },
