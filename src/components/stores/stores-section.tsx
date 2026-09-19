@@ -68,8 +68,6 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       });
 
       const data = snapshot.docs.map((item) => ({ outletId: item.id, ...(item.data() as Omit<Store, 'outletId'>) }));
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
       const visited = new Set<string>();
       const latest: Record<string, Record<string, any>> = {};
 
