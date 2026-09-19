@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, setDoc, writeBatch, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb, getGoogleProvider } from '@/lib/firebase/client';
 import StoresSection from '@/components/stores/stores-section';
 import VisitEvidence from '@/components/visits/visit-evidence';
@@ -106,10 +106,6 @@ export default function HomePage() {
   }, [activeVisitStartedAt]);
 
   useEffect(() => {
-    if (user) void loadIncompleteVisits();
-  }, [user?.uid]);
-
-  useEffect(() => {
     try {
       const auth = getFirebaseAuth();
       return onAuthStateChanged(auth, setUser);
@@ -120,20 +116,7 @@ export default function HomePage() {
   }, []);
 
   async function loadIncompleteVisits() {
-    if (!user) return;
-    try {
-      const snapshot = await getDocs(query(
-        collection(getFirebaseDb(), 'visits'),
-        where('repUid', '==', user.uid)
-      ));
-      const loaded = snapshot.docs
-        .map((d) => ({ id: d.id, data: d.data() as Record<string, any> }))
-        .filter((item) => item.data.status === 'STARTED')
-        .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
-      setIncompleteVisits(loaded);
-    } catch {
-      setIncompleteVisits([]);
-    }
+    setIncompleteVisits([]);
   }
 
   async function deleteVisit(visitId: string) {
@@ -300,6 +283,12 @@ export default function HomePage() {
   }
 
   async function openNewVisit() {
+    if (activeVisitId) {
+      setActiveNav('Visits');
+      setVisitOpen(true);
+      setVisitMessage('You have an unfinished visit. Please finish it before starting another visit.');
+      return;
+    }
     setVisitMode('STANDARD');
     setVisitOpen(true); setActiveNav('Visits'); setVisitMessage(''); setGps(null); setGpsStatus('Not captured'); setVisitStep(1);
     setChecklist({ displayPresent: null, productsWellDisplayed: null, priceVisible: null, staffEngaged: null, competitorActivity: null });
@@ -329,6 +318,12 @@ export default function HomePage() {
   }
 
   async function openVisitForStore(store: { outletId: string; branchName?: string; retailer?: string; location?: string }) {
+    if (activeVisitId) {
+      setActiveNav('Visits');
+      setVisitOpen(true);
+      setVisitMessage('You have an unfinished visit. Please finish it before starting another visit.');
+      return;
+    }
     await openNewVisit();
     setVisit({
       outletId: store.outletId,
@@ -339,6 +334,12 @@ export default function HomePage() {
   }
 
   async function openSamplingVisit() {
+    if (activeVisitId) {
+      setActiveNav('Visits');
+      setVisitOpen(true);
+      setVisitMessage('You have an unfinished visit. Please finish it before starting another visit.');
+      return;
+    }
     setVisitMode('SAMPLING_ONLY');
     setVisitOpen(true);
     setActiveNav('Visits');
@@ -397,20 +398,7 @@ export default function HomePage() {
         backStock: entry.backStock === '' ? 0 : Number(entry.backStock),
         totalStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)),
       }));
-      const visitRef = await addDoc(collection(getFirebaseDb(), 'visits'), {
-        visitType: 'SAMPLING_ONLY',
-        outletId: visit.outletId,
-        outletName: visit.outletName,
-        repUid: user?.uid || '',
-        repName: user?.displayName || user?.email || 'Field rep',
-        status: 'STARTED',
-        notes: visit.notes,
-        gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
-        openingStock,
-        sampling: { conducted: true, customersSampled: 0, bottlesSold: 0, bottlesSoldBySku: {}, feedback: '', reason: '' },
-        startedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      });
+      const visitRef = doc(collection(getFirebaseDb(), 'visits'));
       setActiveVisitId(visitRef.id);
       const startedAt = new Date();
       setActiveVisitStartedAt(startedAt);
@@ -426,18 +414,7 @@ export default function HomePage() {
     if (!visit.outletId) { setVisitMessage('Please select a store.'); return; }
     setSavingVisit(true); setVisitMessage('');
     try {
-      const visitRef = await addDoc(collection(getFirebaseDb(), 'visits'), {
-        visitType: 'STANDARD',
-        outletId: visit.outletId,
-        outletName: visit.outletName,
-        repUid: user?.uid || '',
-        repName: user?.displayName || user?.email || 'Field rep',
-        status: 'STARTED',
-        notes: visit.notes,
-        gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
-        startedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      });
+      const visitRef = doc(collection(getFirebaseDb(), 'visits'));
       setActiveVisitId(visitRef.id);
       const startedAt = new Date();
       setActiveVisitStartedAt(startedAt);
@@ -463,12 +440,6 @@ export default function HomePage() {
     }
     setSavingVisit(true); setVisitMessage('');
     try {
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
-        checklist,
-        checklistReasons,
-        notes: visit.notes,
-        updatedAt: serverTimestamp(),
-      });
       setVisitStep(3);
       setVisitMessage('Checklist saved. The visit is still active.');
     } catch (err) {
@@ -490,28 +461,8 @@ export default function HomePage() {
         totalStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)),
         outOfStock: (entry.shelfStock === '' ? 0 : Number(entry.shelfStock)) + (entry.backStock === '' ? 0 : Number(entry.backStock)) === 0,
       }));
-      const db = getFirebaseDb();
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'visits', activeVisitId), {
-        stock,
-        updatedAt: serverTimestamp(),
-      });
-      for (const item of stock) {
-        batch.set(doc(db, 'stock', `${visit.outletId}_${item.sku}`), {
-          outletId: visit.outletId,
-          outletName: visit.outletName,
-          sku: item.sku,
-          productName: item.productName,
-          quantity: item.totalStock,
-          source: 'VISIT_STOCK_COUNT',
-          visitId: activeVisitId,
-          repUid: user?.uid || '',
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      }
-      await batch.commit();
       setVisitStep(4);
-      setVisitMessage('Stock saved. The visit is still active.');
+      setVisitMessage('Stock recorded. It will be saved when the visit is completed.');
     } catch (err) {
       setVisitMessage(err instanceof Error ? err.message : 'Unable to save stock.');
     } finally { setSavingVisit(false); }
@@ -538,10 +489,6 @@ export default function HomePage() {
           quantity: entry.hasExpiryConcern ? Number(entry.quantity) : 0,
           expiryDate: entry.hasExpiryConcern ? entry.expiryDate : null,
         }));
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
-        expiry,
-        updatedAt: serverTimestamp(),
-      });
       setVisitStep(5);
       setVisitMessage('Expiry information saved. The visit is still active.');
     } catch (err) {
@@ -572,7 +519,7 @@ export default function HomePage() {
     if (items.length === 0) throw new Error('Please enter at least one order quantity.');
     if (items.some((item) => item.quantity < 0 || !Number.isInteger(item.quantity) || item.unitPrice < 0)) throw new Error('Order quantities must be whole numbers and prices must be 0 or more.');
     const totalValue = items.reduce((sum, item) => sum + item.lineTotal, 0);
-    await addDoc(collection(getFirebaseDb(), 'orders'), {
+    return {
       orderNumber: `ORD-${Date.now().toString().slice(-8)}`,
       outletId: visit.outletId,
       outletName: visit.outletName,
@@ -583,9 +530,7 @@ export default function HomePage() {
       totalValue,
       status: 'CAPTURED',
       notes: samplingOrderNotes.trim(),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    };
   }
 
   async function saveSampling() {
@@ -609,19 +554,6 @@ export default function HomePage() {
     const totalBottlesSold = Object.values(bottlesSoldBySku).reduce((sum, quantity) => sum + quantity, 0);
     setSavingVisit(true); setVisitMessage('');
     try {
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
-        sampling: {
-          conducted: sampling.conducted,
-          customersSampled: sampling.conducted ? Number(sampling.customersSampled) : 0,
-          bottlesSold: sampling.conducted ? totalBottlesSold : 0,
-          bottlesSoldBySku: sampling.conducted ? bottlesSoldBySku : {},
-          feedback: sampling.feedback.trim(),
-          reason: sampling.conducted ? '' : sampling.reason.trim(),
-        },
-        orderPlaced: samplingOrderPlaced,
-        orderNotes: samplingOrderNotes.trim(),
-        updatedAt: serverTimestamp(),
-      });
       setVisitStep(6);
       setVisitMessage('Sampling information saved. The visit is still active.');
     } catch (err) {
@@ -724,7 +656,21 @@ export default function HomePage() {
         }, { merge: true });
       }
 
-      batch.update(doc(db, 'visits', activeVisitId), {
+      batch.set(doc(db, 'visits', activeVisitId), {
+        visitType: 'SAMPLING_ONLY',
+        outletId: visit.outletId,
+        outletName: visit.outletName,
+        repUid: user?.uid || '',
+        repName: user?.displayName || user?.email || 'Field rep',
+        notes: visit.notes,
+        gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
+        openingStock: stockEntries.map((entry) => ({
+          sku: entry.sku,
+          productName: entry.productName,
+          shelfStock: Number(entry.shelfStock || 0),
+          backStock: Number(entry.backStock || 0),
+          totalStock: Number(entry.shelfStock || 0) + Number(entry.backStock || 0),
+        })),
         sampling: {
           conducted: true,
           customersSampled: Number(samplingClosingCustomers),
@@ -739,6 +685,8 @@ export default function HomePage() {
         status: 'COMPLETED',
         stoppedAt: serverTimestamp(),
         durationMinutes,
+        startedAt: activeVisitStartedAt ? Timestamp.fromDate(activeVisitStartedAt) : serverTimestamp(),
+        createdAt: activeVisitStartedAt ? Timestamp.fromDate(activeVisitStartedAt) : serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
@@ -767,14 +715,105 @@ export default function HomePage() {
       const now = Date.now();
       const startedMs = activeVisitStartedAt?.getTime();
       const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
-      if (samplingOrderPlaced === true) await createOrderForVisit(activeVisitId);
-      await updateDoc(doc(getFirebaseDb(), 'visits', activeVisitId), {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+
+      const stock = stockEntries.map((entry) => ({
+        sku: entry.sku,
+        productName: entry.productName,
+        shelfStock: Number(entry.shelfStock || 0),
+        backStock: Number(entry.backStock || 0),
+        totalStock: Number(entry.shelfStock || 0) + Number(entry.backStock || 0),
+        outOfStock: Number(entry.shelfStock || 0) + Number(entry.backStock || 0) === 0,
+      }));
+
+      const expiry = expiryEntries
+        .filter((entry) => entry.hasExpiryConcern !== null)
+        .map((entry) => ({
+          sku: entry.sku,
+          productName: entry.productName,
+          hasExpiryConcern: entry.hasExpiryConcern,
+          quantity: entry.hasExpiryConcern ? Number(entry.quantity || 0) : 0,
+          expiryDate: entry.hasExpiryConcern ? entry.expiryDate : null,
+        }));
+
+      for (const item of stock) {
+        batch.set(doc(db, 'stock', `${visit.outletId}_${item.sku}`), {
+          outletId: visit.outletId,
+          outletName: visit.outletName,
+          sku: item.sku,
+          productName: item.productName,
+          quantity: item.totalStock,
+          source: 'VISIT_STOCK_COUNT',
+          visitId: activeVisitId,
+          repUid: user?.uid || '',
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      for (const item of expiry.filter((entry) => entry.hasExpiryConcern === true)) {
+        batch.set(doc(db, 'expiry', `${activeVisitId}_${item.sku}`), {
+          outletId: visit.outletId,
+          outletName: visit.outletName,
+          sku: item.sku,
+          productName: item.productName,
+          hasExpiryConcern: true,
+          quantity: item.quantity,
+          expiryDate: item.expiryDate,
+          visitId: activeVisitId,
+          repUid: user?.uid || '',
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+
+      let orderData: Record<string, any> | null = null;
+      if (samplingOrderPlaced === true) {
+        orderData = await createOrderForVisit(activeVisitId);
+        batch.set(doc(db, 'orders', orderData.orderNumber), {
+          ...orderData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      batch.set(doc(db, 'visits', activeVisitId), {
+        visitType: 'STANDARD',
+        outletId: visit.outletId,
+        outletName: visit.outletName,
+        repUid: user?.uid || '',
+        repName: user?.displayName || user?.email || 'Field rep',
         status: 'COMPLETED',
+        notes: visit.notes,
+        gps: gps ? { lat: gps.lat, lng: gps.lng, accuracyMeters: gps.accuracyMeters, capturedAt: serverTimestamp() } : null,
+        checklist,
+        checklistReasons,
+        stock,
+        expiry,
+        sampling: {
+          conducted: sampling.conducted,
+          customersSampled: sampling.conducted ? Number(sampling.customersSampled || 0) : 0,
+          bottlesSold: sampling.conducted
+            ? Object.values(sampling.bottlesSoldBySku).reduce((sum, value) => sum + Number(value || 0), 0)
+            : 0,
+          bottlesSoldBySku: sampling.conducted
+            ? Object.fromEntries(Object.entries(sampling.bottlesSoldBySku).map(([sku, value]) => [sku, Number(value || 0)]))
+            : {},
+          feedback: sampling.feedback.trim(),
+          reason: sampling.conducted ? '' : sampling.reason.trim(),
+        },
+        orderPlaced: samplingOrderPlaced,
+        orderNotes: samplingOrderNotes.trim(),
+        orderItems: orderData?.items || [],
+        orderValue: orderData?.totalValue || 0,
+        startedAt: activeVisitStartedAt ? Timestamp.fromDate(activeVisitStartedAt) : serverTimestamp(),
+        createdAt: activeVisitStartedAt ? Timestamp.fromDate(activeVisitStartedAt) : serverTimestamp(),
         stoppedAt: serverTimestamp(),
         durationMinutes,
         updatedAt: serverTimestamp(),
       });
-      setVisitMessage('Visit stopped and saved.');
+
+      await batch.commit();
+      setVisitMessage('Visit completed and saved to analytics.');
       setActiveVisitId(null);
       setActiveVisitStartedAt(null);
       setActiveVisitElapsedSeconds(0);
@@ -790,6 +829,12 @@ export default function HomePage() {
         { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
         { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
       ]);
+      setExpiryEntries([
+        { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+        { sku: 'SKU-002', productName: 'Hot Honey', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+        { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+        { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+      ]);
       setSampling({
         conducted: null,
         customersSampled: '',
@@ -797,15 +842,12 @@ export default function HomePage() {
         feedback: '',
         reason: '',
       });
-    setExpiryEntries([
-      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
-      { sku: 'SKU-002', productName: 'Hot Honey', hasExpiryConcern: null, quantity: '', expiryDate: '' },
-      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
-      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
-    ]);
-      setGps(null); setGpsStatus('Not captured');
+      setSamplingOrderPlaced(null);
+      setSamplingOrderNotes('');
+      resetOrderItems();
+      await loadOrders();
     } catch (err) {
-      setVisitMessage(err instanceof Error ? err.message : 'Unable to stop visit.');
+      setVisitMessage(err instanceof Error ? err.message : 'Unable to complete visit.');
     } finally { setSavingVisit(false); }
   }
 
@@ -842,18 +884,17 @@ export default function HomePage() {
       {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Reorders' && <ReordersLanding />}
       {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
-      {activeNav === 'Visits' && (!visitOpen && incompleteVisits.length > 0 ? <div>
+      {activeNav === 'Visits' && (!visitOpen && activeVisitId ? <div>
         <section style={{ ...styles.sectionCard, border: '1px solid #e5e3dd', background: '#fffdf8', marginBottom: 14 }}>
-          <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Open visit</h2><p style={styles.sectionSubtitle}>You have an unfinished visit. Resume it to edit the details or complete it.</p></div></div>
-          <div style={styles.visitList}>{incompleteVisits.map((session) => <article key={session.id} style={styles.visitRow}>
-            <div style={{ minWidth: 0 }}><strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong><div style={styles.visitMeta}>{session.data.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · Started {session.data.startedAt?.toDate?.()?.toLocaleString?.() || 'Earlier'}</div></div>
-            <button onClick={() => session.data.visitType === 'SAMPLING_ONLY' ? void resumeSamplingSession(session) : void resumeStandardVisit(session)} style={styles.darkButton}>Resume</button>
-          </article>)}</div>
-        </section>
-        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />
+          <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Unfinished visit</h2><p style={styles.sectionSubtitle}>Finish this visit before starting another one. Your work is held in this session and is not included in analytics until completion.</p></div></div>
+          <div style={styles.visitList}><article style={styles.visitRow}>
+            <div style={{ minWidth: 0 }}><strong style={styles.visitStore}>${visit.outletName || 'Selected store'}</strong><div style={styles.visitMeta}>${visitMode === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · Started ${activeVisitStartedAt?.toLocaleString?.() || 'Earlier'}</div></div>
+            <button onClick={() => setVisitOpen(true)} style={styles.darkButton}>Continue visit</button>
+          </article></div>
+        </section>        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />
       </div> : visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} orderItems={orderItems} setOrderItems={setOrderItems} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && activeNav !== 'Stock' && activeNav !== 'Orders' && activeNav !== 'Reorders' && <PlaceholderSection title={activeNav} />}
-      {visitOpen && activeNav === 'Visits' && activeVisitId && <VisitEvidence user={user} activeVisitId={activeVisitId} />}
+      {visitOpen && activeNav === 'Visits' && activeVisitId && <VisitEvidence user={user} activeVisitId={activeVisitId} outletName={visit.outletName} visitType={visitMode} />}
     </main>
     <nav className="retailops-bottom-nav" style={styles.bottomNav} aria-label="Mobile navigation">{navItems.map((item) => <button className="retailops-bottom-button" key={item.label} onClick={() => { setActiveNav(item.label); if (item.label !== 'Visits') setVisitOpen(false); }} style={{ ...styles.bottomNavButton, ...(activeNav === item.label ? styles.bottomNavButtonActive : {}) }}><span style={styles.bottomIcon}>{item.icon}</span><span>{item.label}</span></button>)}</nav>
   </div>;
