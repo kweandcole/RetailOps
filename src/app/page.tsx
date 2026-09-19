@@ -888,7 +888,7 @@ export default function HomePage() {
         <section style={{ ...styles.sectionCard, border: '1px solid #e5e3dd', background: '#fffdf8', marginBottom: 14 }}>
           <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Unfinished visit</h2><p style={styles.sectionSubtitle}>Finish this visit before starting another one. Your work is held in this session and is not included in analytics until completion.</p></div></div>
           <div style={styles.visitList}><article style={styles.visitRow}>
-            <div style={{ minWidth: 0 }}><strong style={styles.visitStore}>${visit.outletName || 'Selected store'}</strong><div style={styles.visitMeta}>${visitMode === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · Started ${activeVisitStartedAt?.toLocaleString?.() || 'Earlier'}</div></div>
+            <div style={{ minWidth: 0 }}><strong style={styles.visitStore}>{visit.outletName || 'Selected store'}</strong><div style={styles.visitMeta}>{visitMode === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · Started {activeVisitStartedAt?.toLocaleString?.() || 'Earlier'}</div></div>
             <button onClick={() => setVisitOpen(true)} style={styles.darkButton}>Continue visit</button>
           </article></div>
         </section>        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} onDeleteVisit={deleteVisit} />
