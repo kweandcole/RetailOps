@@ -242,7 +242,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                 <div style={styles.cardMeta}>{store.priority && <span style={styles.priority}>Priority · {store.priority}</span>}</div>
                 <div style={styles.cardActions}>
                   <button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button>
-                  <button onClick={() => onStartVisit(store)} style={styles.visitButton}>Start visit</button>
+                  <button onClick={() => onStartVisit(store)} style={attention > 0 ? styles.followUpButton : styles.visitButton}>{attention > 0 ? 'Start follow-up' : 'Start visit'}</button>
                 </div>
               </div>
 
@@ -313,5 +313,6 @@ const styles: Record<string, React.CSSProperties> = {
   cardActions: { display: 'flex', gap: 7, marginLeft: 'auto' },
   activityButton: { border: '1px solid #d8d6d1', background: '#fff', color: '#333', borderRadius: 8, padding: '8px 10px', fontSize: 9, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
   visitButton: { border: 0, background: '#171717', color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 9, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
+  followUpButton: { border: 0, background: '#9a3412', color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 9, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' },
   empty: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 14, padding: 30, textAlign: 'center', color: '#888', fontSize: 12 },
 };
