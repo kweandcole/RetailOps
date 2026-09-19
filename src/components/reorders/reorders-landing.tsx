@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { addDoc, collection, getDocs, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '@/lib/firebase/client';
 
-type ReorderRow = {
+type Reorder = { id: string; status: string; createdAt?: any; outletCount: number; itemCount: number; totalUnits: number; items: Array<{ outletId: string; outletName: string; sku: string; productName: string; currentStock: number; quantity: number }>; };\n\ntype ReorderRow = {
   id: string;
   outletId: string;
   outletName: string;
@@ -22,6 +22,7 @@ export default function ReordersLanding() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [reorders, setReorders] = useState<Reorder[]>([]);
 
   async function load() {
     setLoading(true);
@@ -48,6 +49,17 @@ export default function ReordersLanding() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => { void loadReorders(); }, []);
+
+  async function loadReorders() {
+    try {
+      const snapshot = await getDocs(collection(getFirebaseDb(), 'reorders'));
+      const loaded = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<Reorder, 'id'>) })) as Reorder[];
+      loaded.sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0));
+      setReorders(loaded);
+    } catch { setReorders([]); }
+  }
 
   const filtered = rows.filter((row) =>
     `${row.outletName} ${row.productName}`.toLowerCase().includes(search.toLowerCase())
@@ -81,10 +93,21 @@ export default function ReordersLanding() {
       setSelected(new Set());
       setMessage('Reorder draft created successfully.');
       console.info('Reorder draft', ref.id);
+      await loadReorders();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create reorder draft.');
     } finally { setSaving(false); }
   }
+
+  async function setReorderStatus(id: string, status: string) {
+    try {
+      await updateDoc(doc(getFirebaseDb(), 'reorders', id), { status, updatedAt: serverTimestamp() });
+      setReorders((current) => current.map((item) => item.id === id ? { ...item, status } : item));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to update reorder status.'); }
+  }
+
+  function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }
+  const statusOptions = ['DRAFT', 'SUBMITTED', 'FULFILLED', 'CANCELLED'];
 
   return <section style={styles.sectionCard}>
     <div style={styles.header}>
@@ -119,6 +142,11 @@ export default function ReordersLanding() {
             </div>
           </article>;
         })}</div>}
+    <div style={styles.historyHeader}><h3 style={styles.historyTitle}>Reorder history</h3><p style={styles.subtitle}>Track drafts and replenishment progress.</p></div>
+    {reorders.length === 0 ? <div style={styles.empty}>No reorder drafts created yet.</div> : <div style={styles.historyList}>{reorders.map((reorder) => <article key={reorder.id} style={styles.historyCard}>
+      <div style={styles.historyTop}><div><strong>{reorder.outletCount || 0} store{(reorder.outletCount || 0) === 1 ? '' : 's'}</strong><span style={styles.historyMeta}>{formatDate(reorder.createdAt)} · {reorder.itemCount || 0} items · {reorder.totalUnits || 0} bottles</span></div><select value={reorder.status} onChange={(e) => void setReorderStatus(reorder.id, e.target.value)} style={styles.statusSelect}>{statusOptions.map((status) => <option key={status}>{status}</option>)}</select></div>
+      <div style={styles.historyItems}>{(reorder.items || []).map((item, index) => <div key={index} style={styles.historyItem}><span><strong>{item.outletName}</strong> · {item.productName}</span><span>{item.currentStock} → <strong>{item.quantity}</strong></span></div>)}</div>
+    </article>)}</div>}
   </section>;
 }
 
@@ -143,4 +171,13 @@ const styles: Record<string, React.CSSProperties> = {
   low: { fontSize: 8, fontWeight: 900, letterSpacing: .4 },
   oos: { fontSize: 8, fontWeight: 900, letterSpacing: .4 },
   empty: { padding: 28, textAlign: 'center', color: '#777', fontSize: 11 },
+  historyHeader: { marginTop: 24, paddingTop: 18, borderTop: '1px solid #e5e3dd' },
+  historyTitle: { margin: 0, fontSize: 16 },
+  historyList: { display: 'grid', gap: 8, marginTop: 10 },
+  historyCard: { border: '1px solid #e5e3dd', borderRadius: 9, padding: 10, background: '#fff' },
+  historyTop: { display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' },
+  historyMeta: { display: 'block', color: '#777', fontSize: 9, marginTop: 3 },
+  statusSelect: { border: '1px solid #ddd', borderRadius: 6, padding: '6px 7px', fontWeight: 800, fontSize: 9, background: '#fff' },
+  historyItems: { marginTop: 9, borderTop: '1px solid #eee', paddingTop: 6, display: 'grid', gap: 4 },
+  historyItem: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, padding: '4px 0' },
 };
