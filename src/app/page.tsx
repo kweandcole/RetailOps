@@ -883,7 +883,7 @@ export default function HomePage() {
       {activeNav === 'Stock' && <StockLanding />}
       {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Reorders' && <ReordersLanding />}
-      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
+      {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} activeSession={activeVisitId && visitMode === 'SAMPLING_ONLY' ? { id: activeVisitId, data: { outletId: visit.outletId, outletName: visit.outletName, notes: visit.notes, gps, openingStock: stockEntries.map((entry) => ({ sku: entry.sku, productName: entry.productName, shelfStock: Number(entry.shelfStock || 0), backStock: Number(entry.backStock || 0), totalStock: Number(entry.shelfStock || 0) + Number(entry.backStock || 0) })), startedAt: activeVisitStartedAt ? Timestamp.fromDate(activeVisitStartedAt) : null, orderPlaced: samplingOrderPlaced, orderNotes: samplingOrderNotes } } : null} />}
       {activeNav === 'Visits' && (!visitOpen && activeVisitId ? <div>
         <section style={{ ...styles.sectionCard, border: '1px solid #e5e3dd', background: '#fffdf8', marginBottom: 14 }}>
           <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Unfinished visit</h2><p style={styles.sectionSubtitle}>Finish this visit before starting another one. Your work is held in this session and is not included in analytics until completion.</p></div></div>
@@ -989,10 +989,11 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
   </div>;
 }
 
-function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
+function SamplingLanding({ onNewSamplingVisit, onResume, userUid, activeSession }: {
   onNewSamplingVisit: () => void;
   onResume: (session: { id: string; data: Record<string, any> }) => void;
   userUid: string;
+  activeSession: { id: string; data: Record<string, any> } | null;
 }) {
   const [sessions, setSessions] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
   const [allVisits, setAllVisits] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
@@ -1020,7 +1021,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
 
   useEffect(() => { void loadSessions(); }, []);
 
-  const active = [] as Array<{ id: string; data: Record<string, any> }>;
+  const active = activeSession ? [activeSession] : [];
   const completed = sessions.filter((session) => session.data.status === 'COMPLETED').slice(0, 10);
   const completedWithSampling = completed.filter((session) => session.data.sampling?.conducted === true);
   const totalCustomersSampled = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.customersSampled || 0), 0);
@@ -1071,9 +1072,25 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
                 <strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong>
                 <div style={styles.visitMeta}>{started ? `Started ${started.toLocaleString()}` : 'Start time pending'}</div>
               </div>
-              <button onClick={() => onResume(session)} style={styles.darkButton}>Close session</button>
+              <button onClick={() => onResume(session)} style={styles.darkButton}>Resume sampling</button>
             </article>;
           })}</div>}
+    </div>
+
+    <div style={{ marginBottom: 18 }}>
+      <strong style={styles.checklistProgress}>SKU performance</strong>
+      <p style={styles.sectionSubtitle}>Bottles sold during completed sampling sessions, by product.</p>
+      <div style={{ marginTop: 10, overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead><tr><th style={styles.orderTableHead}>Product</th><th style={styles.orderTableHead}>Bottles sold</th><th style={styles.orderTableHead}>Share of sampling sales</th></tr></thead>
+          <tbody>{['SKU-001','SKU-002','SKU-003','SKU-004'].map((sku) => {
+            const sold = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.bottlesSoldBySku?.[sku] || 0), 0);
+            const share = totalBottlesSold > 0 ? Math.round((sold / totalBottlesSold) * 100) : 0;
+            const names: Record<string,string> = { 'SKU-001': 'Honey Habanero Hot Sauce', 'SKU-002': 'Hot Honey', 'SKU-003': 'Jalapeno Lime Hot Sauce', 'SKU-004': 'Mango Pineapple Habanero Hot Sauce' };
+            return <tr key={sku}><td style={styles.orderTableCell}>{names[sku]}</td><td style={styles.orderTableCell}>{sold}</td><td style={styles.orderTableCell}>{share}%</td></tr>;
+          })}</tbody>
+        </table>
+      </div>
     </div>
 
     <div>
