@@ -58,6 +58,8 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
   if (loading) return <div style={styles.panel}><strong>Store activity</strong><p style={styles.muted}>Loading activity…</p></div>;
 
   const samplingVisits = visits.filter((v) => v.visitType === 'SAMPLING_ONLY' || v.sampling?.conducted);
+  const customersSampled = samplingVisits.reduce((sum, visit) => sum + Number(visit.sampling?.customersSampled || 0), 0);
+  const bottlesSampledSold = samplingVisits.reduce((sum, visit) => sum + Number(visit.sampling?.bottlesSold || 0), 0);
   const totalOrderValue = orders.reduce((sum, order) => sum + Number(order.totalValue || order.orderValue || 0), 0);
   const latestVisit = visits[0];
 
@@ -70,6 +72,8 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
       <div style={styles.metrics}>
         <Metric label="Visits" value={String(visits.length)} />
         <Metric label="Sampling" value={String(samplingVisits.length)} />
+        <Metric label="Customers sampled" value={String(customersSampled)} />
+        <Metric label="Bottles sold" value={String(bottlesSampledSold)} />
         <Metric label="Orders" value={String(orders.length)} />
         <Metric label="Order value" value={`KSh ${totalOrderValue.toLocaleString()}`} />
       </div>
@@ -116,7 +120,7 @@ const styles: Record<string, React.CSSProperties> = {
   eyebrow: { display: 'block', color: '#888', fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: .6 },
   title: { margin: '3px 0 0', fontSize: 13 },
   count: { background: '#fff', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
-  metrics: { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginTop: 10 },
+  metrics: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 },
   metric: { background: '#fff', borderRadius: 8, padding: 8, display: 'grid', gap: 3, minWidth: 0 },
   latest: { display: 'grid', gap: 3, marginTop: 10, padding: 10, background: '#fff', borderRadius: 8, fontSize: 10 },
   section: { marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e3dd' },
