@@ -825,6 +825,11 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
 
   const active = sessions.filter((session) => session.data.status === 'STARTED');
   const completed = sessions.filter((session) => session.data.status === 'COMPLETED').slice(0, 10);
+  const completedWithSampling = completed.filter((session) => session.data.sampling?.conducted === true);
+  const totalCustomersSampled = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.customersSampled || 0), 0);
+  const totalBottlesSold = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.bottlesSold || 0), 0);
+  const samplingOrderCount = completedWithSampling.filter((session) => session.data.orderPlaced === true).length;
+  const sampleConversion = totalCustomersSampled > 0 ? Math.round((totalBottlesSold / totalCustomersSampled) * 100) : 0;
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
@@ -833,6 +838,17 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
         <button onClick={() => void loadSessions()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={onNewSamplingVisit} style={styles.darkButton}>◎ Start Sampling</button>
       </div>
+    </div>
+
+    <div style={{ marginBottom: 18 }}>
+      <strong style={styles.checklistProgress}>Sampling performance</strong>
+      <p style={styles.sectionSubtitle}>Results from your completed sampling sessions.</p>
+      <section className="retailops-kpis" style={{ ...styles.kpiGrid, gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', marginTop: 12 }}>
+        <article style={styles.kpiCard}><div style={styles.kpiLabel}>Sessions</div><div style={styles.kpiValue}>{completedWithSampling.length}</div><div style={styles.kpiDetail}>Completed sampling sessions</div></article>
+        <article style={styles.kpiCard}><div style={styles.kpiLabel}>Customers sampled</div><div style={styles.kpiValue}>{totalCustomersSampled}</div><div style={styles.kpiDetail}>People engaged</div></article>
+        <article style={styles.kpiCard}><div style={styles.kpiLabel}>Bottles sold</div><div style={styles.kpiValue}>{totalBottlesSold}</div><div style={styles.kpiDetail}>{sampleConversion}% bottles-to-sample ratio</div></article>
+        <article style={styles.kpiCard}><div style={styles.kpiLabel}>Orders placed</div><div style={styles.kpiValue}>{samplingOrderCount}</div><div style={styles.kpiDetail}>Sampling sessions with an order</div></article>
+      </section>
     </div>
 
     <div style={{ marginBottom: 18 }}>
