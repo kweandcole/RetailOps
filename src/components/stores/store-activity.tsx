@@ -6,7 +6,7 @@ import { getFirebaseDb } from '@/lib/firebase/client';
 import VisitEvidenceSummary from '@/components/visits/visit-evidence-summary';
 import StoreOrders from './store-orders';
 
-type StoreActivityProps = { outletId: string; retailer: string; branchName: string };
+type StoreActivityProps = { outletId: string; retailer: string; branchName: string; onStartVisit?: () => void };
 
 const SKU_NAMES: Record<string, string> = {
   'SKU-001': 'Honey Habanero Hot Sauce',
@@ -15,7 +15,7 @@ const SKU_NAMES: Record<string, string> = {
   'SKU-004': 'Mango Pineapple Habanero Hot Sauce',
 };
 
-export default function StoreActivity({ outletId, retailer, branchName }: StoreActivityProps) {
+export default function StoreActivity({ outletId, retailer, branchName, onStartVisit }: StoreActivityProps) {
   const [visits, setVisits] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [stock, setStock] = useState<any[]>([]);
@@ -83,6 +83,7 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
           <div style={styles.attentionItems}>
             {lowStockItems.length > 0 && <span style={styles.stockAttention}>Low stock · {lowStockItems.length}</span>}
             {expiryConcernItems.length > 0 && <span style={styles.expiryAttention}>Expiry · {expiryConcernItems.length}</span>}
+            {onStartVisit && <button type="button" onClick={onStartVisit} style={styles.followUpButton}>Start follow-up visit</button>}
           </div>
         </div>
       ) : (
@@ -149,6 +150,7 @@ const styles: Record<string, React.CSSProperties> = {
   attentionItems: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   stockAttention: { background: '#fff1f2', color: '#991b1b', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
   expiryAttention: { background: '#ffedd5', color: '#9a3412', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
+  followUpButton: { border: 0, background: '#9a3412', color: '#fff', borderRadius: 7, padding: '6px 8px', fontSize: 8, fontWeight: 800, cursor: 'pointer' },
   clearPanel: { marginTop: 10, padding: 9, background: '#f3f4f6', borderRadius: 9, color: '#666', fontSize: 9, fontWeight: 700 },
   metrics: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 },
   metric: { background: '#fff', borderRadius: 8, padding: 8, display: 'grid', gap: 3, minWidth: 0 },
