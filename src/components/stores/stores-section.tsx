@@ -201,16 +201,20 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
           const hasStockAlert = Number(store.stockAlerts || 0) > 0;
           const hasExpiry = Number(store.expiryAlerts || 0) > 0;
           const visitType = latest?.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal';
+          const attention = attentionCount(store);
 
           return (
-            <article key={store.outletId} style={{ ...styles.card, ...(attentionCount(store) > 0 ? styles.cardAttention : {}) }}>
+            <article key={store.outletId} style={{ ...styles.card, ...(attention > 0 ? styles.cardAttention : {}) }}>
               <div style={styles.cardTop}>
                 <div style={styles.identity}>
                   <div style={styles.retailer}>{store.retailer}</div>
                   <h2 style={styles.branch}>{store.branchName}</h2>
                   <div style={styles.location}>{store.location}</div>
                 </div>
-                <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}>{isVisited ? 'Visited' : 'Pending'}</span>
+                <div style={styles.statusStack}>
+                  <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}>{isVisited ? 'Visited' : 'Pending'}</span>
+                  {attention > 0 && <span style={styles.followUpBadge}>Follow-up · {attention}</span>}
+                </div>
               </div>
 
               <div style={styles.attentionRow}>
@@ -281,10 +285,12 @@ const styles: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 14, padding: 15 },
   cardAttention: { borderColor: '#e6c9a4' },
   identity: { minWidth: 0 },
+  statusStack: { display: 'grid', justifyItems: 'end', gap: 5, flexShrink: 0 },
   attentionRow: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 },
   alertBadge: { background: '#fff1f2', color: '#991b1b', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
   expiryBadge: { background: '#fff7ed', color: '#9a3412', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
   clearBadge: { background: '#f3f4f6', color: '#6b7280', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 700 },
+  followUpBadge: { background: '#fff7ed', color: '#9a3412', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 900, whiteSpace: 'nowrap' },
   lastVisit: { display: 'flex', alignItems: 'center', gap: 7, marginTop: 13, paddingTop: 11, borderTop: '1px solid #f0efec', flexWrap: 'wrap' },
   lastVisitLabel: { color: '#888', fontSize: 9, fontWeight: 700 },
   lastVisitDate: { color: '#333', fontSize: 10, fontWeight: 800 },
