@@ -76,7 +76,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       visitSnapshot.docs.forEach((item) => {
         const visit = item.data() as Record<string, any>;
         const timestamp = visit.createdAt?.toDate?.() || visit.startedAt?.toDate?.();
-        if (!visit.outletId || !(timestamp instanceof Date) || visit.status === 'DELETED') return;
+        if (!visit.outletId || !(timestamp instanceof Date) || visit.status !== 'COMPLETED') return;
         const outletId = String(visit.outletId);
         if (timestamp >= startOfToday) visited.add(outletId);
         const existing = latest[outletId];
