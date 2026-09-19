@@ -16,7 +16,7 @@ const checks = [
   ['Competitor activity', 'competitorActivity'],
 ] as const;
 
-export default function VisitDetail({ visit }: { visit: Visit }) {
+export default function VisitDetail({ visit, onDelete }: { visit: Visit; onDelete?: () => void }) {
   const [full, setFull] = useState<Visit>(visit);
   const [orders, setOrders] = useState<any[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -50,6 +50,14 @@ export default function VisitDetail({ visit }: { visit: Visit }) {
   };
 
   return <div style={styles.panel}>
+    {full.status === 'DELETED' && <div style={styles.deletedBanner}>
+      <strong>This visit is deleted</strong>
+      <span>{full.deletedAt?.toDate?.() ? `Deleted ${full.deletedAt.toDate().toLocaleString()}` : 'Deletion date unavailable'}{full.deletedByName ? ` by ${full.deletedByName}` : ''}</span>
+      {full.deletionReason && <span>Reason: {full.deletionReason}</span>}
+    </div>}
+    <div style={styles.detailActions}>
+      {full.status !== 'DELETED' && onDelete && <button type="button" onClick={onDelete} style={styles.deleteButton}>Delete visit</button>}
+    </div>
     <div style={styles.grid}>
       <Info label="Status" value={full.status || 'STARTED'} />
       <Info label="Started" value={started ? started.toLocaleString() : '—'} />
@@ -110,6 +118,9 @@ function Block({ label, children }: { label: string; children: React.ReactNode }
 
 const styles: Record<string, React.CSSProperties> = {
   panel: { marginTop: 12, padding: 14, borderRadius: 11, background: '#f7f7f4', border: '1px solid #e5e3dd' },
+  detailActions: { display: 'flex', justifyContent: 'flex-end', marginBottom: 10 },
+  deleteButton: { border: '1px solid #efcaca', borderRadius: 9, background: '#fff', color: '#991b1b', padding: '8px 11px', fontWeight: 800, cursor: 'pointer', fontSize: 11 },
+  deletedBanner: { display: 'grid', gap: 3, marginBottom: 12, padding: 11, borderRadius: 9, background: '#fff1f2', border: '1px solid #fecdd3', color: '#991b1b', fontSize: 11 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 },
   info: { padding: '8px 9px', background: '#fff', borderRadius: 7, minWidth: 0 },
   label: { display: 'block', color: '#888', fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 3 },
