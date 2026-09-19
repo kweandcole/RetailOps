@@ -31,6 +31,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'All' | StoreStatus>('All');
+  const [sortBy, setSortBy] = useState<'Priority' | 'Attention' | 'Recent' | 'Pending first'>('Priority');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState('');
@@ -131,16 +132,35 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       const matchesFilter = filter === 'All' || (filter === 'Visited' ? isVisited : !isVisited);
       const matchesQuery = !normalized || `${store.branchName} ${store.retailer} ${store.location}`.toLowerCase().includes(normalized);
       return matchesFilter && matchesQuery;
+    }).sort((a, b) => {
+      if (sortBy === 'Attention') return attentionCount(b) - attentionCount(a) || priorityRank(b.priority) - priorityRank(a.priority);
+      if (sortBy === 'Recent') {
+        const getTime = (store: Store) => latestVisits[store.outletId]?.createdAt?.toDate?.()?.getTime?.() || latestVisits[store.outletId]?.startedAt?.toDate?.()?.getTime?.() || 0;
+        return getTime(b) - getTime(a);
+      }
+      if (sortBy === 'Pending first') return Number(visitedStores.has(a.outletId)) - Number(visitedStores.has(b.outletId)) || priorityRank(b.priority) - priorityRank(a.priority);
+      return priorityRank(b.priority) - priorityRank(a.priority) || attentionCount(b) - attentionCount(a);
     });
-  }, [filter, query, stores, visitedStores]);
+  }, [filter, query, sortBy, stores, visitedStores, latestVisits]);
 
   const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
+  const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
 
   return (
     <section>
       <div style={styles.toolbar}>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search stores..." aria-label="Search stores" style={styles.search} />
         <div style={styles.filters}>{(['All', 'Visited', 'Pending'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item}</button>)}</div>
+      </div>
+
+      <div style={styles.sortBar}>
+        <span style={styles.sortLabel}>Sort stores</span>
+        <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)} style={styles.sortSelect} aria-label="Sort stores">
+          <option>Priority</option>
+          <option>Attention</option>
+          <option>Recent</option>
+          <option>Pending first</option>
+        </select>
       </div>
 
       <div style={styles.actionBar}>
@@ -237,6 +257,9 @@ const styles: Record<string, React.CSSProperties> = {
   filters: { display: 'flex', gap: 7, overflowX: 'auto' },
   filter: { border: '1px solid #ddd', background: '#fff', color: '#666', borderRadius: 20, padding: '7px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' },
   filterActive: { background: '#171717', color: '#fff', borderColor: '#171717' },
+  sortBar: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7, marginBottom: 9 },
+  sortLabel: { color: '#888', fontSize: 9, fontWeight: 700 },
+  sortSelect: { border: '1px solid #ddd', background: '#fff', borderRadius: 8, padding: '7px 9px', fontSize: 10, color: '#444' },
   actionBar: { background: '#fff', border: '1px solid #e7e5e0', borderRadius: 12, padding: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 },
   actionTitle: { fontSize: 12 },
   actionText: { color: '#888', fontSize: 10, marginTop: 3 },
