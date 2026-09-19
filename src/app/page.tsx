@@ -61,6 +61,7 @@ export default function HomePage() {
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
   const [activeVisitStartedAt, setActiveVisitStartedAt] = useState<Date | null>(null);
   const [activeVisitElapsedSeconds, setActiveVisitElapsedSeconds] = useState(0);
+  const [incompleteVisits, setIncompleteVisits] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
   const [stockEntries, setStockEntries] = useState<StockEntry[]>([
     { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
     { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
@@ -105,6 +106,10 @@ export default function HomePage() {
   }, [activeVisitStartedAt]);
 
   useEffect(() => {
+    if (user) void loadIncompleteVisits();
+  }, [user?.uid]);
+
+  useEffect(() => {
     try {
       const auth = getFirebaseAuth();
       return onAuthStateChanged(auth, setUser);
@@ -113,6 +118,110 @@ export default function HomePage() {
       return undefined;
     }
   }, []);
+
+  async function loadIncompleteVisits() {
+    if (!user) return;
+    try {
+      const snapshot = await getDocs(query(
+        collection(getFirebaseDb(), 'visits'),
+        where('repUid', '==', user.uid),
+        where('status', '==', 'STARTED')
+      ));
+      const loaded = snapshot.docs
+        .map((d) => ({ id: d.id, data: d.data() as Record<string, any> }))
+        .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
+      setIncompleteVisits(loaded);
+    } catch {
+      setIncompleteVisits([]);
+    }
+  }
+
+  async function resumeStandardVisit(session: { id: string; data: Record<string, any> }) {
+    const data = session.data;
+    const startedAt = data.startedAt?.toDate?.();
+    const checklistData = data.checklist || {};
+    const stockData = Array.isArray(data.stock) ? data.stock : [];
+    const expiryData = Array.isArray(data.expiry) ? data.expiry : [];
+    const samplingData = data.sampling || {};
+
+    setActiveVisitId(session.id);
+    setActiveVisitStartedAt(startedAt instanceof Date ? startedAt : new Date());
+    setActiveVisitElapsedSeconds(startedAt instanceof Date ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) : 0);
+    setActiveNav('Visits');
+    setVisitMode(data.visitType === 'SAMPLING_ONLY' ? 'SAMPLING_ONLY' : 'STANDARD');
+    setVisitOpen(true);
+    setVisit({
+      outletId: data.outletId || '',
+      outletName: data.outletName || '',
+      notes: data.notes || '',
+    });
+    setGps(data.gps?.lat != null && data.gps?.lng != null ? {
+      lat: Number(data.gps.lat),
+      lng: Number(data.gps.lng),
+      accuracyMeters: Number(data.gps.accuracyMeters || 0),
+    } : null);
+    setGpsStatus(data.gps ? 'Captured' : 'Not captured');
+
+    setChecklist({
+      displayPresent: checklistData.displayPresent ?? null,
+      productsWellDisplayed: checklistData.productsWellDisplayed ?? null,
+      priceVisible: checklistData.priceVisible ?? null,
+      staffEngaged: checklistData.staffEngaged ?? null,
+      competitorActivity: checklistData.competitorActivity ?? null,
+    });
+    setChecklistReasons({
+      displayPresent: data.checklistReasons?.displayPresent || '',
+      productsWellDisplayed: data.checklistReasons?.productsWellDisplayed || '',
+      priceVisible: data.checklistReasons?.priceVisible || '',
+      staffEngaged: data.checklistReasons?.staffEngaged || '',
+      competitorActivity: data.checklistReasons?.competitorActivity || '',
+    });
+
+    setStockEntries(stockData.length ? stockData.map((item: any) => ({
+      sku: item.sku,
+      productName: item.productName,
+      shelfStock: String(item.shelfStock ?? 0),
+      backStock: String(item.backStock ?? 0),
+    })) : [
+      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-002', productName: 'Hot Honey', shelfStock: '', backStock: '' },
+      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', shelfStock: '', backStock: '' },
+      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', shelfStock: '', backStock: '' },
+    ]);
+    setExpiryEntries(expiryData.length ? expiryData.map((item: any) => ({
+      sku: item.sku,
+      productName: item.productName,
+      hasExpiryConcern: item.hasExpiryConcern ?? null,
+      quantity: item.hasExpiryConcern ? String(item.quantity ?? '') : '',
+      expiryDate: item.hasExpiryConcern ? String(item.expiryDate ?? '') : '',
+    })) : [
+      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+      { sku: 'SKU-002', productName: 'Hot Honey', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
+    ];
+    setSampling({
+      conducted: samplingData.conducted ?? null,
+      customersSampled: samplingData.customersSampled != null ? String(samplingData.customersSampled) : '',
+      bottlesSoldBySku: Object.fromEntries(['SKU-001','SKU-002','SKU-003','SKU-004'].map((sku) => [sku, samplingData.bottlesSoldBySku?.[sku] != null ? String(samplingData.bottlesSoldBySku[sku]) : ''])),
+      feedback: samplingData.feedback || '',
+      reason: samplingData.reason || '',
+    });
+    setSamplingOrderPlaced(data.orderPlaced ?? null);
+    setSamplingOrderNotes(data.orderNotes || '');
+    const savedItems = Array.isArray(data.orderItems) ? data.orderItems : [];
+    setOrderItems(savedItems.length ? savedItems.map((item: any) => ({
+      sku: item.sku, productName: item.productName, quantity: String(item.quantity ?? ''), unitPrice: String(item.unitPrice ?? '550'),
+    })) : [
+      { sku: 'SKU-001', productName: 'Honey Habanero Hot Sauce', quantity: '', unitPrice: '550' },
+      { sku: 'SKU-002', productName: 'Hot Honey', quantity: '', unitPrice: '650' },
+      { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', quantity: '', unitPrice: '550' },
+      { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', quantity: '', unitPrice: '550' },
+    ]);
+    const step = data.sampling || data.orderPlaced !== undefined ? 6 : data.expiry ? 5 : data.stock ? 4 : data.checklist ? 3 : 2;
+    setVisitStep(step);
+    setVisitMessage('Open visit restored. You can continue editing and complete it normally.');
+  }
 
   async function loadOrders() {
     if (!user) return;
@@ -708,7 +817,16 @@ export default function HomePage() {
       {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Reorders' && <ReordersLanding />}
       {activeNav === 'Sampling' && <SamplingLanding onNewSamplingVisit={openSamplingVisit} onResume={resumeSamplingSession} userUid={user.uid} />}
-      {activeNav === 'Visits' && (visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} orderItems={orderItems} setOrderItems={setOrderItems} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
+      {activeNav === 'Visits' && (!visitOpen && incompleteVisits.length > 0 ? <div>
+        <section style={{ ...styles.sectionCard, border: '1px solid #e5e3dd', background: '#fffdf8', marginBottom: 14 }}>
+          <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Open visit</h2><p style={styles.sectionSubtitle}>You have an unfinished visit. Resume it to edit the details or complete it.</p></div></div>
+          <div style={styles.visitList}>{incompleteVisits.map((session) => <article key={session.id} style={styles.visitRow}>
+            <div style={{ minWidth: 0 }}><strong style={styles.visitStore}>{session.data.outletName || 'Unnamed store'}</strong><div style={styles.visitMeta}>{session.data.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal visit'} · Started {session.data.startedAt?.toDate?.()?.toLocaleString?.() || 'Earlier'}</div></div>
+            <button onClick={() => session.data.visitType === 'SAMPLING_ONLY' ? void resumeSamplingSession(session) : void resumeStandardVisit(session)} style={styles.darkButton}>Resume</button>
+          </article>)}</div>
+        </section>
+        <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />
+      </div> : visitOpen ? <VisitEntry visitMode={visitMode} outlets={outlets} visit={visit} setVisit={setVisit} visitStep={visitStep} setVisitStep={setVisitStep} checklist={checklist} setChecklist={setChecklist} checklistReasons={checklistReasons} setChecklistReasons={setChecklistReasons} stockEntries={stockEntries} setStockEntries={setStockEntries} expiryEntries={expiryEntries} setExpiryEntries={setExpiryEntries} sampling={sampling} setSampling={setSampling} setVisitMessage={setVisitMessage} gpsStatus={gpsStatus} onCaptureGps={captureGps} onStart={startVisit} onStartSampling={startSamplingVisit} onCompleteSampling={completeSamplingVisit} samplingClosingSales={samplingClosingSales} setSamplingClosingSales={setSamplingClosingSales} samplingClosingCustomers={samplingClosingCustomers} setSamplingClosingCustomers={setSamplingClosingCustomers} samplingOrderPlaced={samplingOrderPlaced} setSamplingOrderPlaced={setSamplingOrderPlaced} samplingOrderNotes={samplingOrderNotes} setSamplingOrderNotes={setSamplingOrderNotes} orderItems={orderItems} setOrderItems={setOrderItems} activeVisitElapsedSeconds={activeVisitElapsedSeconds} activeVisitStartedAt={activeVisitStartedAt} onSaveChecklist={saveChecklist} onSaveStock={saveStock} onSaveExpiry={saveExpiry} onSaveSampling={saveSampling} onStop={stopVisit} saving={savingVisit} message={visitMessage} onClose={() => setVisitOpen(false)} /> : <VisitsLanding onNewVisit={openNewVisit} onNewSamplingVisit={openSamplingVisit} />)}
       {activeNav !== 'Dashboard' && activeNav !== 'Stores' && activeNav !== 'Visits' && activeNav !== 'Sampling' && activeNav !== 'Stock' && activeNav !== 'Orders' && activeNav !== 'Reorders' && <PlaceholderSection title={activeNav} />}
       {visitOpen && activeNav === 'Visits' && activeVisitId && <VisitEvidence user={user} activeVisitId={activeVisitId} />}
     </main>
