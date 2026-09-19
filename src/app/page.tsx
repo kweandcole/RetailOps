@@ -1066,6 +1066,9 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
       const snapshot = await getDocs(collection(getFirebaseDb(), 'visits'));
       const loaded: Array<Record<string, any>> = snapshot.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Record<string, any>) }));
       loaded.sort((a, b) => {
+        const aDeleted = a.status === 'DELETED';
+        const bDeleted = b.status === 'DELETED';
+        if (aDeleted !== bDeleted) return aDeleted ? 1 : -1;
         const aTime = a.createdAt?.toDate?.()?.getTime() || 0;
         const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
         return bTime - aTime;
@@ -1102,7 +1105,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
       visits.length === 0 ? <div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No visits recorded yet</strong><span>Start a new visit to create the first record.</span></div> :
       <div style={styles.visitList}>{visits.filter((item) => visitFilter === 'ALL' || (visitFilter === 'DELETED' ? item.status === 'DELETED' : item.status !== 'DELETED' && (item.visitType || 'STANDARD') === visitFilter)).map((item) => {
         const date = item.createdAt?.toDate?.();
-        return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${item.status === 'DELETED' ? '#991b1b' : (item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? '#7c3aed' : '#2563eb'}`, opacity: item.status === 'DELETED' ? 0.82 : 1 }}>
+        return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${item.status === 'DELETED' ? '#991b1b' : (item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? '#7c3aed' : '#2563eb'}`, opacity: item.status === 'DELETED' ? 0.5 : 1, filter: item.status === 'DELETED' ? 'grayscale(0.35)' : 'none' }}>
           <div style={{ minWidth: 0 }}>
             <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={item.status === 'DELETED' ? styles.deletedBadge : ((item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? styles.samplingBadge : styles.standardBadge)}>{item.status === 'DELETED' ? 'DELETED' : ((item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL VISIT')}</span></div>
             <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}{item.status === 'DELETED' && item.deletedAt?.toDate?.() ? ` · Deleted ${item.deletedAt.toDate().toLocaleString()}` : ''}</div>
