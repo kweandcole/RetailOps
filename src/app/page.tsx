@@ -1104,7 +1104,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
         const date = item.createdAt?.toDate?.();
         return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${item.status === 'DELETED' ? '#991b1b' : (item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? '#7c3aed' : '#2563eb'}`, opacity: item.status === 'DELETED' ? 0.82 : 1 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? styles.samplingBadge : styles.standardBadge}>{(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL VISIT'}</span></div>
+            <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={item.status === 'DELETED' ? styles.deletedBadge : ((item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? styles.samplingBadge : styles.standardBadge)}>{item.status === 'DELETED' ? 'DELETED' : ((item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL VISIT')}</span></div>
             <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}{item.status === 'DELETED' && item.deletedAt?.toDate?.() ? ` · Deleted ${item.deletedAt.toDate().toLocaleString()}` : ''}</div>
             <VisitEvidenceSummary visitId={item.id} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
