@@ -922,7 +922,7 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       const visits: Array<Record<string, any>> = visitSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
-      const activeVisits = visits.filter((item) => item.status !== 'DELETED');
+      const activeVisits = visits.filter((item) => item.status === 'COMPLETED');
       const todayVisits = activeVisits.filter((item) => {
         const date = item.createdAt?.toDate?.();
         return date instanceof Date && date >= today && date < tomorrow;
@@ -1008,8 +1008,8 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
       const loadedAll = snapshot.docs
         .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
         .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
-      setAllVisits(loadedAll.filter((session) => session.data.status !== 'DELETED'));
-      setSessions(loadedAll.filter((session) => session.data.visitType === 'SAMPLING_ONLY').slice(0, 30));
+      setAllVisits(loadedAll.filter((session) => session.data.status === 'COMPLETED'));
+      setSessions(loadedAll.filter((session) => session.data.visitType === 'SAMPLING_ONLY' && session.data.status === 'COMPLETED').slice(0, 30));
     } catch {
       setSessions([]);
       setAllVisits([]);
@@ -1020,7 +1020,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
 
   useEffect(() => { void loadSessions(); }, []);
 
-  const active = sessions.filter((session) => session.data.status === 'STARTED');
+  const active = [] as Array<{ id: string; data: Record<string, any> }>;
   const completed = sessions.filter((session) => session.data.status === 'COMPLETED').slice(0, 10);
   const completedWithSampling = completed.filter((session) => session.data.sampling?.conducted === true);
   const totalCustomersSampled = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.customersSampled || 0), 0);
@@ -1114,7 +1114,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
         const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
         return bTime - aTime;
       });
-      setVisits(loaded.slice(0, 50));
+      setVisits(loaded.filter((item) => item.status === 'COMPLETED' || item.status === 'DELETED').slice(0, 50));
     } catch {
       setVisits([]);
     } finally {
