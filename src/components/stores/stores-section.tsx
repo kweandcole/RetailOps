@@ -36,7 +36,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
-  const [visitedToday, setVisitedToday] = useState<Set<string>>(new Set());
+  const [visitedStores, setVisitedStores] = useState<Set<string>>(new Set());
   const [latestVisits, setLatestVisits] = useState<Record<string, Record<string, any>>>({});
 
   async function loadStores() {
@@ -78,7 +78,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
         const timestamp = visit.createdAt?.toDate?.() || visit.startedAt?.toDate?.();
         if (!visit.outletId || !(timestamp instanceof Date) || visit.status !== 'COMPLETED') return;
         const outletId = String(visit.outletId);
-        if (timestamp >= startOfToday) visited.add(outletId);
+        visited.add(outletId);
         const existing = latest[outletId];
         const existingTime = existing?.createdAt?.toDate?.() || existing?.startedAt?.toDate?.();
         if (!existing || timestamp.getTime() > (existingTime instanceof Date ? existingTime.getTime() : 0)) {
@@ -86,7 +86,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
         }
       });
 
-      setVisitedToday(visited);
+      setVisitedStores(visited);
       setLatestVisits(latest);
       setStores(data.map((store) => ({
         ...store,
@@ -125,12 +125,12 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
   const filteredStores = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return stores.filter((store) => {
-      const isVisited = visitedToday.has(store.outletId) || store.status === 'Visited';
+      const isVisited = visitedStores.has(store.outletId);
       const matchesFilter = filter === 'All' || (filter === 'Visited' ? isVisited : !isVisited);
       const matchesQuery = !normalized || `${store.branchName} ${store.retailer} ${store.location}`.toLowerCase().includes(normalized);
       return matchesFilter && matchesQuery;
     });
-  }, [filter, query, stores, visitedToday]);
+  }, [filter, query, stores, visitedStores]);
 
   const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
 
@@ -160,7 +160,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       <div style={styles.list}>
         {!loading && filteredStores.map((store) => {
           const latest = latestVisits[store.outletId];
-          const isVisited = visitedToday.has(store.outletId) || store.status === 'Visited';
+          const isVisited = visitedStores.has(store.outletId);
           const hasStockAlert = Number(store.stockAlerts || 0) > 0;
           const hasExpiry = Number(store.expiryAlerts || 0) > 0;
           const visitType = latest?.visitType === 'SAMPLING_ONLY' ? 'Sampling' : 'Normal';
@@ -173,7 +173,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                   <h2 style={styles.branch}>{store.branchName}</h2>
                   <div style={styles.location}>{store.location}</div>
                 </div>
-                <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}>{isVisited ? 'Visited today' : 'Pending'}</span>
+                <span style={{ ...styles.status, ...(isVisited ? styles.statusVisited : styles.statusPending) }}{isVisited ? 'Visited' : 'Pending'}</span>
               </div>
 
               <div style={styles.attentionRow}>
