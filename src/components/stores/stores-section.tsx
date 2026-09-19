@@ -203,6 +203,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                     <span style={styles.lastVisitDate}>{formatDate(latest.createdAt || latest.startedAt)}</span>
                     <span style={styles.visitType}>{visitType}</span>
                     <span style={styles.visitCount}>{visitCounts[store.outletId] || 0} completed {(visitCounts[store.outletId] || 0) === 1 ? 'visit' : 'visits'}</span>
+                    {latest?.repName && <span style={styles.visitRep}>by {latest.repName}</span>}
                   </>
                 ) : (
                   <span style={styles.neverVisited}>Never visited</span>
@@ -264,6 +265,7 @@ const styles: Record<string, React.CSSProperties> = {
   lastVisitDate: { color: '#333', fontSize: 10, fontWeight: 800 },
   visitType: { color: '#777', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
   visitCount: { color: '#999', fontSize: 9, fontWeight: 600 },
+  visitRep: { color: '#777', fontSize: 9, fontWeight: 600 },
   neverVisited: { color: '#9a3412', fontSize: 9, fontWeight: 800 },
   cardTop: { display: 'flex', justifyContent: 'space-between', gap: 12 },
   retailer: { color: '#888', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8 },
