@@ -63,12 +63,32 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
   const totalOrderValue = orders.reduce((sum, order) => sum + Number(order.totalValue || order.orderValue || 0), 0);
   const latestVisit = visits[0];
 
+  const lowStockItems = stock.filter((item) => Number(item.quantity ?? Number(item.shelfStock || 0) + Number(item.backStock || 0)) <= 5);
+  const expiryConcernItems = expiry.filter((item) => item.hasExpiryConcern);
+  const attentionCount = lowStockItems.length + expiryConcernItems.length;
+
   return (
     <div style={styles.panel}>
       <div style={styles.header}>
         <div><span style={styles.eyebrow}>Store activity</span><h3 style={styles.title}>{retailer} · {branchName}</h3></div>
         <span style={styles.count}>{visits.length} visits</span>
       </div>
+
+      {attentionCount > 0 ? (
+        <div style={styles.attentionPanel}>
+          <div>
+            <span style={styles.eyebrow}>Needs attention</span>
+            <strong style={styles.attentionTitle}>{attentionCount} issue{attentionCount === 1 ? '' : 's'} to follow up</strong>
+          </div>
+          <div style={styles.attentionItems}>
+            {lowStockItems.length > 0 && <span style={styles.stockAttention}>Low stock · {lowStockItems.length}</span>}
+            {expiryConcernItems.length > 0 && <span style={styles.expiryAttention}>Expiry · {expiryConcernItems.length}</span>}
+          </div>
+        </div>
+      ) : (
+        <div style={styles.clearPanel}>No current stock or expiry issues.</div>
+      )}
+
       <div style={styles.metrics}>
         <Metric label="Visits" value={String(visits.length)} />
         <Metric label="Sampling" value={String(samplingVisits.length)} />
@@ -88,11 +108,15 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
       </div>
       <div style={styles.section}>
         <span style={styles.eyebrow}>Current stock</span>
-        {stock.length === 0 ? <p style={styles.muted}>No stock records yet.</p> : <div style={styles.list}>{stock.map((item) => <div key={item.id} style={styles.row}><span>{item.productName || item.sku}</span><strong>{Number(item.shelfStock || 0) + Number(item.backStock || 0)} bottles</strong></div>)}</div>}
+        {stock.length === 0 ? <p style={styles.muted}>No stock records yet.</p> : <div style={styles.list}>{stock.map((item) => {
+          const quantity = Number(item.quantity ?? Number(item.shelfStock || 0) + Number(item.backStock || 0));
+          const low = quantity <= 5;
+          return <div key={item.id} style={{ ...styles.row, ...(low ? styles.lowStockRow : {}) }}><span>{item.productName || SKU_NAMES[item.sku] || item.sku}</span><strong>{quantity} bottles{low ? ' · Low' : ''}</strong></div>;
+        })}</div>}
       </div>
       <div style={styles.section}>
         <span style={styles.eyebrow}>Expiry issues</span>
-        {expiry.length === 0 ? <p style={styles.muted}>No expiry records yet.</p> : <div style={styles.list}>{expiry.map((item) => <div key={item.id} style={styles.row}><span>{item.productName || item.sku}</span><strong>{item.hasExpiryConcern ? String(item.quantity || 0) + ' · ' + (item.expiryDate || 'date not recorded') : 'No concern'}</strong></div>)}</div>}
+        {expiry.length === 0 ? <p style={styles.muted}>No expiry records yet.</p> : <div style={styles.list}>{expiry.map((item) => <div key={item.id} style={{ ...styles.row, ...(item.hasExpiryConcern ? styles.expiryRow : {}) }}><span>{item.productName || SKU_NAMES[item.sku] || item.sku}</span><strong>{item.hasExpiryConcern ? String(item.quantity || 0) + ' · ' + (item.expiryDate || 'date not recorded') : 'No concern'}</strong></div>)}</div>}
       </div>
       <div style={styles.section}>
         <span style={styles.eyebrow}>Visit history</span>
@@ -120,12 +144,20 @@ const styles: Record<string, React.CSSProperties> = {
   eyebrow: { display: 'block', color: '#888', fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: .6 },
   title: { margin: '3px 0 0', fontSize: 13 },
   count: { background: '#fff', borderRadius: 999, padding: '5px 8px', fontSize: 9, fontWeight: 800 },
+  attentionPanel: { marginTop: 10, padding: 10, background: '#fff7ed', border: '1px solid #f1d5ad', borderRadius: 9, display: 'grid', gap: 7 },
+  attentionTitle: { display: 'block', marginTop: 3, fontSize: 11 },
+  attentionItems: { display: 'flex', gap: 6, flexWrap: 'wrap' },
+  stockAttention: { background: '#fff1f2', color: '#991b1b', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
+  expiryAttention: { background: '#ffedd5', color: '#9a3412', borderRadius: 999, padding: '4px 7px', fontSize: 8, fontWeight: 800 },
+  clearPanel: { marginTop: 10, padding: 9, background: '#f3f4f6', borderRadius: 9, color: '#666', fontSize: 9, fontWeight: 700 },
   metrics: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginTop: 10 },
   metric: { background: '#fff', borderRadius: 8, padding: 8, display: 'grid', gap: 3, minWidth: 0 },
   latest: { display: 'grid', gap: 3, marginTop: 10, padding: 10, background: '#fff', borderRadius: 8, fontSize: 10 },
   section: { marginTop: 12, paddingTop: 10, borderTop: '1px solid #e5e3dd' },
   list: { display: 'grid', gap: 6, marginTop: 6 },
   row: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 8px', background: '#fff', borderRadius: 7, fontSize: 10 },
+  lowStockRow: { border: '1px solid #fecdd3' },
+  expiryRow: { border: '1px solid #fed7aa' },
   visitCard: { padding: 9, background: '#fff', borderRadius: 8 },
   detailBox: { marginTop: 7, padding: 8, background: '#f7f7f4', borderRadius: 7, display: 'grid', gap: 5, fontSize: 9 },
   detailTitle: { fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: .5 },
