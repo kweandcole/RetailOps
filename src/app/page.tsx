@@ -612,6 +612,35 @@ export default function HomePage() {
       return;
     }
 
+    let samplingOrder: Record<string, any> | null = null;
+    if (samplingOrderPlaced === true) {
+      const items = orderItems.filter((item) => Number(item.quantity) > 0).map((item) => ({
+        sku: item.sku,
+        productName: item.productName,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice) || 0,
+        lineTotal: Number(item.quantity) * (Number(item.unitPrice) || 0),
+      }));
+      if (items.length === 0 || items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 0 || item.unitPrice < 0)) {
+        setVisitMessage('For an order, enter at least one product with a whole-number quantity and valid price.');
+        return;
+      }
+      samplingOrder = {
+        orderNumber: `ORD-${Date.now().toString().slice(-8)}`,
+        outletId: visit.outletId,
+        outletName: visit.outletName,
+        visitId: activeVisitId,
+        repUid: user?.uid || '',
+        repName: user?.displayName || user?.email || 'Field rep',
+        items,
+        totalValue: items.reduce((sum, item) => sum + item.lineTotal, 0),
+        status: 'CAPTURED',
+        notes: samplingOrderNotes.trim(),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+    }
+
     const closingBySku = Object.fromEntries(
       Object.entries(samplingClosingSales).map(([sku, value]) => [sku, value === '' ? 0 : Number(value)])
     );
@@ -641,6 +670,10 @@ export default function HomePage() {
       const durationMinutes = startedMs ? Math.max(0, Math.round((now - startedMs) / 60000)) : null;
       const db = getFirebaseDb();
       const batch = writeBatch(db);
+
+      if (samplingOrder) {
+        batch.set(doc(collection(db, 'orders')), samplingOrder);
+      }
 
       for (const item of closingStock) {
         batch.set(doc(db, 'stock', `${visit.outletId}_${item.sku}`), {
@@ -1544,7 +1577,12 @@ function VisitEntry({
             <button type="button" aria-pressed={samplingOrderPlaced === false} onClick={() => { setSamplingOrderPlaced(false); setSamplingOrderNotes(''); }} style={{ ...styles.answerButton, ...(samplingOrderPlaced === false ? styles.answerButtonNoActive : {}) }}>× No</button>
           </div>
         </div>
-        {samplingOrderPlaced === true && <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number, quantities or any useful details" rows={2} style={styles.reasonTextarea} /></label>}
+        {samplingOrderPlaced === true && <>
+          <label style={styles.reasonField}><span style={styles.reasonLabel}>Order details / reference</span><textarea value={samplingOrderNotes} onChange={(e) => setSamplingOrderNotes(e.target.value)} placeholder="Enter order number or useful details" rows={2} style={styles.reasonTextarea} /></label>
+          <div style={{ marginTop: 12 }}><strong style={styles.checklistProgress}>Order items</strong><span style={styles.checklistProgressText}>Enter quantities for the products ordered during this sampling session.</span>
+            <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>{orderItems.map((item) => <div key={item.sku} style={styles.samplingClosingRow}><div style={{ minWidth: 0, flex: 1 }}><strong style={styles.samplingProductName}>{item.productName}</strong><span style={styles.samplingStockLabel}>KSh {Number(item.unitPrice || 0).toLocaleString()} each</span></div><input aria-label={`${item.productName} order quantity`} type="number" min="0" step="1" inputMode="numeric" value={item.quantity} onChange={(e) => setOrderItems((current) => current.map((x) => x.sku === item.sku ? { ...x, quantity: e.target.value } : x))} placeholder="0" style={styles.samplingQuantity} /></div>)}</div>
+          </div>
+        </>}
       </div>
 <label style={styles.reasonField}><span style={styles.reasonLabel}>Customer feedback</span><textarea value={sampling.feedback} onChange={(e) => setSampling((current) => ({ ...current, feedback: e.target.value }))} placeholder="What did shoppers say?" rows={3} style={styles.reasonTextarea} /></label>
       {message && <div style={styles.message}>{message}</div>}
