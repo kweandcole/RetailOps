@@ -727,7 +727,7 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const visits = visitSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+      const visits: Array<Record<string, any>> = visitSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
       const todayVisits = visits.filter((item) => {
         const date = item.createdAt?.toDate?.();
         return date instanceof Date && date >= today && date < tomorrow;
