@@ -42,7 +42,7 @@ const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 :
 export default function StoresSection({ onStartVisit }: { onStartVisit: (store: Store) => void }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'All' | StoreStatus>('All');
+  const [filter, setFilter] = useState<'All' | StoreStatus | 'Attention'>('All');
   const [sortBy, setSortBy] = useState<'Priority' | 'Attention' | 'Recent' | 'Pending first'>('Priority');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -137,7 +137,10 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
     const normalized = query.trim().toLowerCase();
     return stores.filter((store) => {
       const isVisited = visitedStores.has(store.outletId);
-      const matchesFilter = filter === 'All' || (filter === 'Visited' ? isVisited : !isVisited);
+      const hasAttention = attentionCount(store) > 0;
+      const matchesFilter =
+        filter === 'All' ||
+        (filter === 'Visited' ? isVisited : filter === 'Pending' ? !isVisited : hasAttention);
       const matchesQuery = !normalized || `${store.branchName} ${store.retailer} ${store.location}`.toLowerCase().includes(normalized);
       return matchesFilter && matchesQuery;
     }).sort((a, b) => {
@@ -155,7 +158,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
     <section>
       <div style={styles.toolbar}>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search stores..." aria-label="Search stores" style={styles.search} />
-        <div style={styles.filters}>{(['All', 'Visited', 'Pending'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item}</button>)}</div>
+        <div style={styles.filters}>{(['All', 'Visited', 'Pending', 'Attention'] as const).map((item) => <button key={item} onClick={() => setFilter(item)} style={{ ...styles.filter, ...(filter === item ? styles.filterActive : {}) }}>{item}</button>)}</div>
       </div>
 
       <div style={styles.sortBar}>
