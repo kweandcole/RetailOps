@@ -505,8 +505,8 @@ export default function HomePage() {
     ]);
   }
 
-  async function createOrderForVisit(visitId: string): Promise<Record<string, any> | null> {
-    if (samplingOrderPlaced !== true) return;
+  async function createOrderForVisit(visitId: string): Promise<Record<string, any>> {
+    if (samplingOrderPlaced !== true) throw new Error('Order creation requested without an order.');
     const items = orderItems
       .filter((item) => Number(item.quantity) > 0)
       .map((item) => ({
