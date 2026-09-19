@@ -881,7 +881,8 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       const visits: Array<Record<string, any>> = visitSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
-      const todayVisits = visits.filter((item) => {
+      const activeVisits = visits.filter((item) => item.status !== 'DELETED');
+      const todayVisits = activeVisits.filter((item) => {
         const date = item.createdAt?.toDate?.();
         return date instanceof Date && date >= today && date < tomorrow;
       });
@@ -897,7 +898,7 @@ function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: s
         return date instanceof Date && date >= today && date < tomorrow;
       });
       const orderValue = todayOrders.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
-      const recent = [...visits].sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0)).slice(0, 8);
+      const recent = [...activeVisits].sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0)).slice(0, 8);
       setStats({ visits: todayVisits.length, stores, customersSampled, stockAlerts, orders: todayOrders.length, orderValue, recent });
     } catch {
       setStats({ visits: 0, stores: 0, customersSampled: 0, stockAlerts: 0, orders: 0, orderValue: 0, recent: [] });
@@ -966,7 +967,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
       const loadedAll = snapshot.docs
         .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
         .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
-      setAllVisits(loadedAll);
+      setAllVisits(loadedAll.filter((session) => session.data.status !== 'DELETED'));
       setSessions(loadedAll.filter((session) => session.data.visitType === 'SAMPLING_ONLY').slice(0, 30));
     } catch {
       setSessions([]);
@@ -1069,7 +1070,7 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
         const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
         return bTime - aTime;
       });
-      setVisits(loaded.filter((item) => item.status !== 'DELETED').slice(0, 25));
+      setVisits(loaded.slice(0, 50));
     } catch {
       setVisits([]);
     } finally {
@@ -1101,14 +1102,14 @@ function VisitsLanding({ onNewVisit, onNewSamplingVisit, onDeleteVisit }: { onNe
       visits.length === 0 ? <div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No visits recorded yet</strong><span>Start a new visit to create the first record.</span></div> :
       <div style={styles.visitList}>{visits.filter((item) => visitFilter === 'ALL' || (item.visitType || 'STANDARD') === visitFilter).map((item) => {
         const date = item.createdAt?.toDate?.();
-        return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? '#7c3aed' : '#2563eb'}` }}>
+        return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${item.status === 'DELETED' ? '#991b1b' : (item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? '#7c3aed' : '#2563eb'}`, opacity: item.status === 'DELETED' ? 0.82 : 1 }}>
           <div style={{ minWidth: 0 }}>
             <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? styles.samplingBadge : styles.standardBadge}>{(item.visitType || 'STANDARD') === 'SAMPLING_ONLY' ? 'SAMPLING' : 'NORMAL VISIT'}</span></div>
-            <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}</div>
+            <div style={styles.visitMeta}>{item.repName || 'Field rep'}{date ? ` · ${date.toLocaleString()}` : ''}{item.status === 'DELETED' && item.deletedAt?.toDate?.() ? ` · Deleted ${item.deletedAt.toDate().toLocaleString()}` : ''}</div>
             <VisitEvidenceSummary visitId={item.id} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
               <button onClick={(e) => { e.stopPropagation(); setSelectedVisit(selectedVisit?.id === item.id ? null : item); }} style={styles.smallButton}>{selectedVisit?.id === item.id ? 'Hide details' : 'View details →'}</button>
-              <button onClick={(e) => { e.stopPropagation(); void onDeleteVisit(item.id); }} style={{ ...styles.smallButton, color: '#991b1b', borderColor: '#f0caca' }}>Delete visit</button>
+              {item.status !== 'DELETED' && <button onClick={(e) => { e.stopPropagation(); void onDeleteVisit(item.id); }} style={{ ...styles.smallButton, color: '#991b1b', borderColor: '#f0caca' }}>Delete visit</button>}
             </div>
           {selectedVisit?.id === item.id && <VisitDetail visit={item} onDelete={() => void onDeleteVisit(item.id)} />}
           </div>
