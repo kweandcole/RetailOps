@@ -246,7 +246,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                 </div>
               </div>
 
-              {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} />}
+              {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} onStartVisit={() => onStartVisit(store)} />}
             </article>
           );
         })}
