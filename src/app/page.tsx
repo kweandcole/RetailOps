@@ -194,6 +194,16 @@ export default function HomePage() {
     }
   }
 
+  async function openVisitForStore(store: { outletId: string; branchName?: string; retailer?: string; location?: string }) {
+    await openNewVisit();
+    setVisit({
+      outletId: store.outletId,
+      outletName: store.branchName || store.retailer || '',
+      notes: '',
+    });
+    setVisitMessage('Store selected. Capture GPS and start the visit.');
+  }
+
   async function openSamplingVisit() {
     setVisitMode('SAMPLING_ONLY');
     setVisitOpen(true);
@@ -693,7 +703,7 @@ export default function HomePage() {
         <div className="retailops-header-user" style={styles.headerUser}><span>{user.displayName || user.email || 'Signed-in user'}</span><button onClick={handleSignOut} disabled={busy} style={styles.headerSignOut}>{busy ? '…' : 'Sign out'}</button></div>
       </header>
       {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} userUid={user.uid} />}
-      {activeNav === 'Stores' && <StoresSection />}
+      {activeNav === 'Stores' && <StoresSection onStartVisit={openVisitForStore} />}
       {activeNav === 'Stock' && <StockLanding />}
       {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
       {activeNav === 'Reorders' && <ReordersLanding />}
