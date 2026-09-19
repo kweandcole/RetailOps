@@ -103,7 +103,7 @@ export default function StoreActivity({ outletId, retailer, branchName }: StoreA
 function Metric({ label, value }: { label: string; value: string }) {
   return <div style={styles.metric}><span>{label}</span><strong>{value}</strong></div>;
 }
-function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }
+function formatDate(value: any) { const date = value?.toDate?.(); return date ? `${String(date.getDate()).padStart(2, '0')}-${date.toLocaleString('en-GB', { month: 'short' })}-${String(date.getFullYear()).slice(-2)}` : 'Date unavailable'; }
 
 const styles: Record<string, React.CSSProperties> = {
   panel: { marginTop: 12, padding: 14, borderRadius: 12, background: '#f7f7f4', border: '1px solid #e5e3dd' },
