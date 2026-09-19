@@ -5,13 +5,6 @@ import { addDoc, collection, onSnapshot, query, serverTimestamp, where } from 'f
 import { User } from 'firebase/auth';
 import { getFirebaseDb } from '@/lib/firebase/client';
 
-type ActiveVisit = {
-  id: string;
-  outletId?: string;
-  outletName?: string;
-  visitType?: string;
-};
-
 type EvidenceFile = {
   id: string;
   fileName: string;
@@ -23,20 +16,16 @@ type EvidenceFile = {
 
 const PHOTO_TYPES = ['Shelf / Stock', 'Display', 'Price / POS', 'Sampling', 'Competitor', 'Other'];
 
-export default function VisitEvidence({ user, activeVisitId }: { user: User; activeVisitId: string }) {
-  const [visit, setVisit] = useState<ActiveVisit | null>(null);
+export default function VisitEvidence({ user, activeVisitId, outletName, visitType }: { user: User; activeVisitId: string; outletName?: string; visitType?: string }) {
+  const [visit, setVisit] = useState({ id: activeVisitId, outletName, visitType });
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [photoType, setPhotoType] = useState('Shelf / Stock');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const q = query(collection(getFirebaseDb(), 'visits'), where('repUid', '==', user.uid), where('status', '==', 'STARTED'));
-    return onSnapshot(q, (snapshot) => {
-      const match = snapshot.docs.find((doc) => doc.id === activeVisitId);
-      setVisit(match ? { id: match.id, ...(match.data() as Omit<ActiveVisit, 'id'>) } : null);
-    }, () => setVisit(null));
-  }, [user.uid, activeVisitId]);
+    setVisit({ id: activeVisitId, outletName, visitType });
+  }, [activeVisitId, outletName, visitType]);
 
   useEffect(() => {
     if (!visit) { setFiles([]); return; }
