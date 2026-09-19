@@ -692,7 +692,7 @@ export default function HomePage() {
         <div><div className="retailops-mobile-brand" style={styles.mobileBrand}>KWE & COLE</div><h1 style={styles.pageTitle}>{activeNav}</h1><p style={styles.pageSubtitle}>Retail field operations at a glance.</p></div>
         <div className="retailops-header-user" style={styles.headerUser}><span>{user.displayName || user.email || 'Signed-in user'}</span><button onClick={handleSignOut} disabled={busy} style={styles.headerSignOut}>{busy ? '…' : 'Sign out'}</button></div>
       </header>
-      {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} />}
+      {activeNav === 'Dashboard' && <Dashboard onNewVisit={openNewVisit} userUid={user.uid} />}
       {activeNav === 'Stores' && <StoresSection />}
       {activeNav === 'Stock' && <StockLanding />}
       {activeNav === 'Orders' && <OrdersLanding orders={orders} onRefresh={loadOrders} />}
@@ -707,7 +707,93 @@ export default function HomePage() {
 }
 
 function LoginScreen({ busy, error, onSignIn }: { busy: boolean; error: string; onSignIn: () => void }) { return <main style={styles.loginPage}><section style={styles.loginCard}><div style={styles.eyebrow}>KWE & COLE</div><h1 style={styles.loginTitle}>RetailOps</h1><p style={styles.loginText}>Retail field operations, visits, stock and store activity in one place.</p><button onClick={onSignIn} disabled={busy} style={styles.googleButton}>{busy ? 'Signing in…' : 'Continue with Google'}</button>{error && <div role="alert" style={styles.error}>{error}</div>}</section></main>; }
-function Dashboard({ onNewVisit }: { onNewVisit: () => void }) { return <div><section className="retailops-welcome" style={styles.welcomeCard}><div><div style={styles.eyebrow}>FIELD OPERATIONS</div><h2 style={styles.welcomeTitle}>Good to see you.</h2><p style={styles.welcomeText}>Your RetailOps workspace is ready. Start by recording a store visit.</p></div><button onClick={onNewVisit} style={styles.primaryButton}>+ New Visit</button></section><section className="retailops-kpis" style={styles.kpiGrid}>{activity.map((item) => <article key={item.title} style={styles.kpiCard}><div style={styles.kpiLabel}>{item.title}</div><div style={styles.kpiValue}>{item.value}</div><div style={styles.kpiDetail}>{item.detail}</div></article>)}</section><section style={styles.sectionCard}><div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Today&apos;s activity</h2><p style={styles.sectionSubtitle}>Visit and store activity will appear here.</p></div><span style={styles.statusPill}>Ready</span></div><div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No activity recorded yet</strong><span>Once field reps begin visits, their activity will show here.</span></div></section></div>; }
+function Dashboard({ onNewVisit, userUid }: { onNewVisit: () => void; userUid: string }) {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    visits: 0, stores: 0, customersSampled: 0, stockAlerts: 0, orders: 0, orderValue: 0,
+    recent: [] as Array<Record<string, any>>,
+  });
+
+  async function loadDashboard() {
+    setLoading(true);
+    try {
+      const db = getFirebaseDb();
+      const [visitSnapshot, stockSnapshot, orderSnapshot] = await Promise.all([
+        getDocs(collection(db, 'visits')),
+        getDocs(collection(db, 'stock')),
+        getDocs(collection(db, 'orders')),
+      ]);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const visits = visitSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+      const todayVisits = visits.filter((item) => {
+        const date = item.createdAt?.toDate?.();
+        return date instanceof Date && date >= today && date < tomorrow;
+      });
+      const stores = new Set(todayVisits.map((item) => item.outletId).filter(Boolean)).size;
+      const customersSampled = todayVisits.reduce((sum, item) => sum + Number(item.sampling?.customersSampled || 0), 0);
+      const stockAlerts = stockSnapshot.docs.reduce((sum, d) => {
+        const quantity = Number((d.data() as Record<string, any>).quantity || 0);
+        return sum + (quantity <= 5 ? 1 : 0);
+      }, 0);
+      const orders = orderSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, any>) }));
+      const todayOrders = orders.filter((item) => {
+        const date = item.createdAt?.toDate?.();
+        return date instanceof Date && date >= today && date < tomorrow;
+      });
+      const orderValue = todayOrders.reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
+      const recent = [...visits].sort((a, b) => (b.createdAt?.toDate?.()?.getTime?.() || 0) - (a.createdAt?.toDate?.()?.getTime?.() || 0)).slice(0, 8);
+      setStats({ visits: todayVisits.length, stores, customersSampled, stockAlerts, orders: todayOrders.length, orderValue, recent });
+    } catch {
+      setStats({ visits: 0, stores: 0, customersSampled: 0, stockAlerts: 0, orders: 0, orderValue: 0, recent: [] });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadDashboard(); }, [userUid]);
+
+  return <div>
+    <section className="retailops-welcome" style={styles.welcomeCard}>
+      <div>
+        <div style={styles.eyebrow}>FIELD OPERATIONS</div>
+        <h2 style={styles.welcomeTitle}>Good to see you.</h2>
+        <p style={styles.welcomeText}>Today&apos;s field activity, sampling and stock alerts in one view.</p>
+      </div>
+      <button onClick={onNewVisit} style={styles.primaryButton}>+ New Visit</button>
+    </section>
+
+    <section className="retailops-kpis" style={styles.kpiGrid}>
+      <article style={styles.kpiCard}><div style={styles.kpiLabel}>Visits today</div><div style={styles.kpiValue}>{loading ? '—' : stats.visits}</div><div style={styles.kpiDetail}>{stats.stores} store{stats.stores === 1 ? '' : 's'} visited</div></article>
+      <article style={styles.kpiCard}><div style={styles.kpiLabel}>Customers sampled</div><div style={styles.kpiValue}>{loading ? '—' : stats.customersSampled}</div><div style={styles.kpiDetail}>Across today&apos;s visits</div></article>
+      <article style={styles.kpiCard}><div style={styles.kpiLabel}>Stock alerts</div><div style={styles.kpiValue}>{loading ? '—' : stats.stockAlerts}</div><div style={styles.kpiDetail}>5 bottles or fewer</div></article>
+      <article style={styles.kpiCard}><div style={styles.kpiLabel}>Orders today</div><div style={styles.kpiValue}>{loading ? '—' : stats.orders}</div><div style={styles.kpiDetail}>KSh {stats.orderValue.toLocaleString()} recorded</div></article>
+    </section>
+
+    <section style={styles.sectionCard}>
+      <div style={styles.sectionHeader}>
+        <div><h2 style={styles.sectionTitle}>Recent activity</h2><p style={styles.sectionSubtitle}>The latest store visits across the team.</p></div>
+        <button onClick={() => void loadDashboard()} style={styles.secondaryButton}>{loading ? 'Loading…' : 'Refresh'}</button>
+      </div>
+      {stats.recent.length === 0
+        ? <div style={styles.emptyState}><div style={styles.emptyIcon}>✓</div><strong>No visits recorded yet</strong><span>Once field reps begin visits, their activity will appear here.</span></div>
+        : <div style={styles.visitList}>{stats.recent.map((item) => {
+          const date = item.createdAt?.toDate?.();
+          const sampling = item.visitType === 'SAMPLING_ONLY';
+          return <article key={item.id} style={{ ...styles.visitRow, borderLeft: `4px solid ${sampling ? '#7c3aed' : '#2563eb'}` }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={styles.visitTitleRow}><strong style={styles.visitStore}>{item.outletName || 'Unnamed store'}</strong><span style={sampling ? styles.samplingBadge : styles.standardBadge}>{sampling ? 'SAMPLING' : 'NORMAL VISIT'}</span></div>
+              <div style={styles.visitMeta}>{item.repName || 'Field rep'} · {date ? date.toLocaleString() : 'Date unavailable'}</div>
+            </div>
+            <span style={styles.statusPill}>{item.status || 'STARTED'}</span>
+          </article>;
+        })}</div>}
+    </section>
+  </div>;
+}
+
 function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
   onNewSamplingVisit: () => void;
   onResume: (session: { id: string; data: Record<string, any> }) => void;
