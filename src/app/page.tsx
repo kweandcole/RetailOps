@@ -505,7 +505,7 @@ export default function HomePage() {
     ]);
   }
 
-  async function createOrderForVisit(visitId: string) {
+  async function createOrderForVisit(visitId: string): Promise<Record<string, any> | null> {
     if (samplingOrderPlaced !== true) return;
     const items = orderItems
       .filter((item) => Number(item.quantity) > 0)
