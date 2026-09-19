@@ -199,7 +199,7 @@ export default function HomePage() {
       { sku: 'SKU-002', productName: 'Hot Honey', hasExpiryConcern: null, quantity: '', expiryDate: '' },
       { sku: 'SKU-003', productName: 'Jalapeno Lime Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
       { sku: 'SKU-004', productName: 'Mango Pineapple Habanero Hot Sauce', hasExpiryConcern: null, quantity: '', expiryDate: '' },
-    ];
+    );
     setSampling({
       conducted: samplingData.conducted ?? null,
       customersSampled: samplingData.customersSampled != null ? String(samplingData.customersSampled) : '',
