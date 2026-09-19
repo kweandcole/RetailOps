@@ -27,6 +27,9 @@ function formatDate(value: any) {
   return `${String(date.getDate()).padStart(2, '0')}-${months[date.getMonth()]}-${String(date.getFullYear()).slice(-2)}`;
 }
 
+const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
+const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
+
 export default function StoresSection({ onStartVisit }: { onStartVisit: (store: Store) => void }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
@@ -142,9 +145,6 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       return priorityRank(b.priority) - priorityRank(a.priority) || attentionCount(b) - attentionCount(a);
     });
   }, [filter, query, sortBy, stores, visitedStores, latestVisits]);
-
-  const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
-  const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
 
   return (
     <section>
