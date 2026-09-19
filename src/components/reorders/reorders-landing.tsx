@@ -25,6 +25,7 @@ export default function ReordersLanding() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [reorders, setReorders] = useState<Reorder[]>([]);
+  const [reorderFilter, setReorderFilter] = useState<'ALL' | 'DRAFT' | 'SUBMITTED' | 'FULFILLED' | 'CANCELLED'>('ALL');
 
   async function load() {
     setLoading(true);
@@ -68,6 +69,9 @@ export default function ReordersLanding() {
   );
   const oos = rows.filter((row) => row.quantity === 0).length;
   const low = rows.filter((row) => row.quantity > 0).length;
+  const filteredReorders = reorderFilter === 'ALL'
+    ? reorders
+    : reorders.filter((reorder) => reorder.status === reorderFilter);
 
   function toggleRow(id: string) {
     setSelected((current) => {
@@ -144,8 +148,17 @@ export default function ReordersLanding() {
             </div>
           </article>;
         })}</div>}
+
     <div style={styles.historyHeader}><h3 style={styles.historyTitle}>Reorder history</h3><p style={styles.subtitle}>Track drafts and replenishment progress.</p></div>
-    {reorders.length === 0 ? <div style={styles.empty}>No reorder drafts created yet.</div> : <div style={styles.historyList}>{reorders.map((reorder) => <article key={reorder.id} style={styles.historyCard}>
+    <div style={styles.historyFilters}>
+      {(['ALL', 'DRAFT', 'SUBMITTED', 'FULFILLED', 'CANCELLED'] as const).map((filter) => {
+        const count = filter === 'ALL' ? reorders.length : reorders.filter((reorder) => reorder.status === filter).length;
+        return <button key={filter} onClick={() => setReorderFilter(filter)} style={reorderFilter === filter ? styles.filterActive : styles.filterButton}>
+          {filter === 'ALL' ? 'All' : filter.charAt(0) + filter.slice(1).toLowerCase()} <span style={styles.filterCount}>{count}</span>
+        </button>;
+      })}
+    </div>
+    {filteredReorders.length === 0 ? <div style={styles.empty}>No reorder records in this status.</div> : <div style={styles.historyList}>{filteredReorders.map((reorder) => <article key={reorder.id} style={styles.historyCard}>
       <div style={styles.historyTop}><div><strong>{reorder.outletCount || 0} store{(reorder.outletCount || 0) === 1 ? '' : 's'}</strong><span style={styles.historyMeta}>{formatDate(reorder.createdAt)} · {reorder.itemCount || 0} items · {reorder.totalUnits || 0} bottles</span></div><select value={reorder.status} onChange={(e) => void setReorderStatus(reorder.id, e.target.value)} style={styles.statusSelect}>{statusOptions.map((status) => <option key={status}>{status}</option>)}</select></div>
       <div style={styles.historyItems}>{(reorder.items || []).map((item, index) => <div key={index} style={styles.historyItem}><span><strong>{item.outletName}</strong> · {item.productName}</span><span>{item.currentStock} → <strong>{item.quantity}</strong></span></div>)}</div>
     </article>)}</div>}
@@ -175,11 +188,15 @@ const styles: Record<string, React.CSSProperties> = {
   empty: { padding: 28, textAlign: 'center', color: '#777', fontSize: 11 },
   historyHeader: { marginTop: 24, paddingTop: 18, borderTop: '1px solid #e5e3dd' },
   historyTitle: { margin: 0, fontSize: 16 },
+  historyFilters: { display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 10 },
+  filterButton: { padding: '7px 10px', border: '1px solid #ddd', borderRadius: 999, background: '#fff', fontSize: 9, fontWeight: 800 },
+  filterActive: { padding: '7px 10px', border: '1px solid #171717', borderRadius: 999, background: '#171717', color: '#fff', fontSize: 9, fontWeight: 800 },
+  filterCount: { opacity: .65, marginLeft: 3 },
+  statusSelect: { border: '1px solid #ddd', borderRadius: 6, padding: '6px 7px', fontWeight: 800, fontSize: 9, background: '#fff' },
   historyList: { display: 'grid', gap: 8, marginTop: 10 },
   historyCard: { border: '1px solid #e5e3dd', borderRadius: 9, padding: 10, background: '#fff' },
   historyTop: { display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' },
   historyMeta: { display: 'block', color: '#777', fontSize: 9, marginTop: 3 },
-  statusSelect: { border: '1px solid #ddd', borderRadius: 6, padding: '6px 7px', fontWeight: 800, fontSize: 9, background: '#fff' },
   historyItems: { marginTop: 9, borderTop: '1px solid #eee', paddingTop: 6, display: 'grid', gap: 4 },
   historyItem: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, padding: '4px 0' },
 };
