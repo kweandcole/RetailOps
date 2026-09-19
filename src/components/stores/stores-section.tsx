@@ -27,6 +27,15 @@ function formatDate(value: any) {
   return `${String(date.getDate()).padStart(2, '0')}-${months[date.getMonth()]}-${String(date.getFullYear()).slice(-2)}`;
 }
 
+function visitAge(value: any) {
+  const date = value?.toDate?.();
+  if (!(date instanceof Date)) return '';
+  const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
 const attentionCount = (store: Store) => Number(store.stockAlerts || 0) + Number(store.expiryAlerts || 0);
 const priorityRank = (priority?: Store['priority']) => priority === 'High' ? 3 : priority === 'Medium' ? 2 : 1;
 
@@ -112,11 +121,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
       if (!response.ok || !result.ok) throw new Error(result.error || 'Unable to read the legacy Outlet Master.');
       const outlets = result.outlets as Store[];
       await Promise.all(outlets.map((outlet) => {
-        const store = {
-          ...outlet,
-          outletName: outlet.branchName,
-          branch: outlet.branchName,
-        };
+        const store = { ...outlet, outletName: outlet.branchName, branch: outlet.branchName };
         return setDoc(doc(getFirebaseDb(), 'outlets', outlet.outletId), store, { merge: true });
       }));
       setMessage(`${outlets.length} outlets imported from the legacy Outlet Master.`);
@@ -173,10 +178,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
 
       <div style={styles.coveragePanel}>
         <div style={styles.coverageHeader}>
-          <div>
-            <span style={styles.coverageEyebrow}>Store coverage</span>
-            <strong style={styles.coverageTitle}>Field coverage at a glance</strong>
-          </div>
+          <div><span style={styles.coverageEyebrow}>Store coverage</span><strong style={styles.coverageTitle}>Field coverage at a glance</strong></div>
           <span style={styles.coverageCount}>{loading ? '…' : filteredStores.length}</span>
         </div>
         <div style={styles.coverageGrid}>
@@ -184,9 +186,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
           <div style={styles.coverageMetric}><strong>{Math.max(0, stores.length - visitedStores.size)}</strong><span>Pending</span></div>
           <div style={styles.coverageMetric}><strong>{stores.filter((store) => attentionCount(store) > 0).length}</strong><span>Needs attention</span></div>
         </div>
-        <div style={styles.coverageNote}>
-          Visited means the store has at least one completed visit. Unfinished visits are not counted.
-        </div>
+        <div style={styles.coverageNote}>Visited means the store has at least one completed visit. Unfinished visits are not counted.</div>
       </div>
 
       <div style={styles.summary}>{loading ? 'Loading stores…' : `${filteredStores.length} stores shown`}</div>
@@ -223,6 +223,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
                     <span style={styles.lastVisitDate}>{formatDate(latest.createdAt || latest.startedAt)}</span>
                     <span style={styles.visitType}>{visitType}</span>
                     <span style={styles.visitCount}>{visitCounts[store.outletId] || 0} completed {(visitCounts[store.outletId] || 0) === 1 ? 'visit' : 'visits'}</span>
+                    <span style={styles.visitAge}>{visitAge(latest.createdAt || latest.startedAt)}</span>
                     {latest?.repName && <span style={styles.visitRep}>by {latest.repName}</span>}
                   </>
                 ) : (
@@ -231,9 +232,7 @@ export default function StoresSection({ onStartVisit }: { onStartVisit: (store: 
               </div>
 
               <div style={styles.cardBottom}>
-                <div style={styles.cardMeta}>
-                  {store.priority && <span style={styles.priority}>Priority · {store.priority}</span>}
-                </div>
+                <div style={styles.cardMeta}>{store.priority && <span style={styles.priority}>Priority · {store.priority}</span>}</div>
                 <div style={styles.cardActions}>
                   <button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button>
                   <button onClick={() => onStartVisit(store)} style={styles.visitButton}>Start visit</button>
@@ -288,6 +287,7 @@ const styles: Record<string, React.CSSProperties> = {
   lastVisitDate: { color: '#333', fontSize: 10, fontWeight: 800 },
   visitType: { color: '#777', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 },
   visitCount: { color: '#999', fontSize: 9, fontWeight: 600 },
+  visitAge: { color: '#777', fontSize: 9, fontWeight: 700 },
   visitRep: { color: '#777', fontSize: 9, fontWeight: 600 },
   neverVisited: { color: '#9a3412', fontSize: 9, fontWeight: 800 },
   cardTop: { display: 'flex', justifyContent: 'space-between', gap: 12 },
