@@ -800,6 +800,7 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
   userUid: string;
 }) {
   const [sessions, setSessions] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
+  const [allVisits, setAllVisits] = useState<Array<{ id: string; data: Record<string, any> }>>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadSessions() {
@@ -809,13 +810,14 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
         collection(getFirebaseDb(), 'visits'),
         where('repUid', '==', userUid)
       ));
-      const loaded = snapshot.docs
+      const loadedAll = snapshot.docs
         .map((visitDoc) => ({ id: visitDoc.id, data: visitDoc.data() }))
-        .filter((session) => session.data.visitType === 'SAMPLING_ONLY')
         .sort((a, b) => (b.data.startedAt?.toMillis?.() ?? 0) - (a.data.startedAt?.toMillis?.() ?? 0));
-      setSessions(loaded.slice(0, 30));
+      setAllVisits(loadedAll);
+      setSessions(loadedAll.filter((session) => session.data.visitType === 'SAMPLING_ONLY').slice(0, 30));
     } catch {
       setSessions([]);
+      setAllVisits([]);
     } finally {
       setLoading(false);
     }
@@ -830,6 +832,10 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
   const totalBottlesSold = completedWithSampling.reduce((sum, session) => sum + Number(session.data.sampling?.bottlesSold || 0), 0);
   const samplingOrderCount = completedWithSampling.filter((session) => session.data.orderPlaced === true).length;
   const sampleConversion = totalCustomersSampled > 0 ? Math.round((totalBottlesSold / totalCustomersSampled) * 100) : 0;
+  const completedStandard = allVisits.filter((session) => session.data.visitType !== 'SAMPLING_ONLY' && session.data.status === 'COMPLETED');
+  const completedSampling = allVisits.filter((session) => session.data.visitType === 'SAMPLING_ONLY' && session.data.status === 'COMPLETED');
+  const samplingOrderRate = completedSampling.length ? Math.round((completedSampling.filter((session) => session.data.orderPlaced === true).length / completedSampling.length) * 100) : 0;
+  const standardOrderRate = completedStandard.length ? Math.round((completedStandard.filter((session) => session.data.orderPlaced === true).length / completedStandard.length) * 100) : 0;
 
   return <section style={styles.sectionCard}>
     <div style={styles.sectionHeader}>
@@ -849,6 +855,14 @@ function SamplingLanding({ onNewSamplingVisit, onResume, userUid }: {
         <article style={styles.kpiCard}><div style={styles.kpiLabel}>Bottles sold</div><div style={styles.kpiValue}>{totalBottlesSold}</div><div style={styles.kpiDetail}>{sampleConversion}% bottles-to-sample ratio</div></article>
         <article style={styles.kpiCard}><div style={styles.kpiLabel}>Orders placed</div><div style={styles.kpiValue}>{samplingOrderCount}</div><div style={styles.kpiDetail}>Sampling sessions with an order</div></article>
       </section>
+      <div style={{ marginTop: 12, padding: 12, border: '1px solid #e5e3dd', borderRadius: 9, background: '#fafafa' }}>
+        <strong style={styles.checklistProgress}>Sampling impact</strong>
+        <p style={styles.sectionSubtitle}>Order placement rate for completed sampling sessions compared with normal completed visits.</p>
+        <div className="retailops-kpis" style={{ ...styles.kpiGrid, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginTop: 10 }}>
+          <article style={styles.kpiCard}><div style={styles.kpiLabel}>Sampling order rate</div><div style={styles.kpiValue}>{samplingOrderRate}%</div><div style={styles.kpiDetail}>{completedSampling.length} completed sampling visits</div></article>
+          <article style={styles.kpiCard}><div style={styles.kpiLabel}>Normal visit order rate</div><div style={styles.kpiValue}>{standardOrderRate}%</div><div style={styles.kpiDetail}>{completedStandard.length} completed normal visits</div></article>
+        </div>
+      </div>
     </div>
 
     <div style={{ marginBottom: 18 }}>
