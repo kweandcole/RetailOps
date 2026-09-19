@@ -20,7 +20,7 @@ type Store = {
 
 function formatDate(value: any) { const date = value?.toDate?.(); return date ? date.toLocaleString() : 'Date unavailable'; }
 
-export default function StoresSection() {
+export default function StoresSection({ onStartVisit }: { onStartVisit: (store: Store) => void }) {
   const [stores, setStores] = useState<Store[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'All' | StoreStatus>('All');
@@ -123,7 +123,7 @@ export default function StoresSection() {
             <div style={styles.visitSummaryMeta}>{formatDate(latestVisits[store.outletId].createdAt || latestVisits[store.outletId].startedAt)} · {latestVisits[store.outletId].repName || 'Field rep'} · {latestVisits[store.outletId].status || '—'}</div>
             {latestVisits[store.outletId].notes && <div style={styles.visitSummaryNotes}>{latestVisits[store.outletId].notes}</div>}
           </div>}
-          <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><div style={styles.cardActions}><button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button><button style={styles.visitButton}>Start visit</button></div></div>
+          <div style={styles.cardBottom}><span style={styles.priority}>Priority: {store.priority}</span><div style={styles.cardActions}><button onClick={() => setSelectedStoreId(selectedStoreId === store.outletId ? null : store.outletId)} style={styles.activityButton}>{selectedStoreId === store.outletId ? 'Hide activity' : 'View activity →'}</button><button onClick={() => onStartVisit(store)} style={styles.visitButton}>Start visit</button></div></div>
           {selectedStoreId === store.outletId && <StoreActivity outletId={store.outletId} retailer={store.retailer} branchName={store.branchName} />}
         </article>)}
         {!loading && filteredStores.length === 0 && <div style={styles.empty}>{stores.length === 0 ? 'No stores have been imported yet. Use “Import from Sheets” to bring in the existing Outlet Master.' : 'No stores match your search.'}</div>}
